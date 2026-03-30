@@ -82,6 +82,12 @@ InitTestScene*.unity*
 # Claude Code local instructions (not for version control)
 CLAUDE.md
 
+# Docs images
+Docs/**/*.png
+Docs/**/*.jpg
+Docs/**/*.jpeg
+Docs/**/*.gif
+
 # StreamingAssets (large media files, AVPRO, etc.)
 /[Aa]ssets/StreamingAssets/
 /[Aa]ssets/StreamingAssets.meta
