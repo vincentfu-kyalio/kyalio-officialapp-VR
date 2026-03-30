@@ -1,0 +1,69 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Unity YAML files
+*.meta text eol=lf
+*.unity text eol=lf
+*.prefab text eol=lf
+*.asset text eol=lf
+*.anim text eol=lf
+*.controller text eol=lf
+*.overrideController text eol=lf
+*.physicMaterial text eol=lf
+*.physicsMaterial2D text eol=lf
+*.playable text eol=lf
+*.renderTexture text eol=lf
+*.flare text eol=lf
+*.fontsettings text eol=lf
+*.guiskin text eol=lf
+*.lighting text eol=lf
+*.shadervariants text eol=lf
+*.spriteatlas text eol=lf
+*.signal text eol=lf
+*.preset text eol=lf
+*.shadergraph text eol=lf
+*.shadersubgraph text eol=lf
+*.inputactions text eol=lf
+*.asmdef text eol=lf
+*.asmref text eol=lf
+
+# Source code
+*.cs text eol=lf
+*.shader text eol=lf
+*.cginc text eol=lf
+*.hlsl text eol=lf
+*.glsl text eol=lf
+*.compute text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+
+# Binary files - no line ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.tga binary
+*.tif binary
+*.tiff binary
+*.psd binary
+*.exr binary
+*.hdr binary
+*.fbx binary
+*.obj binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.mp4 binary
+*.mov binary
+*.avi binary
+*.ttf binary
+*.otf binary
+*.dll binary
+*.so binary
+*.a binary
+*.lib binary
+*.pdb binary
