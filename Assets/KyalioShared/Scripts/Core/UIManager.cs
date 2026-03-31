@@ -23,7 +23,7 @@ namespace Kyalio.Core
         private class PageEntry
         {
             public PageType pageType;
-            public MonoBehaviour handler;
+            public GameObject pageObject;
         }
 
         private readonly Dictionary<PageType, IPageHandler> _pageMap = new();
@@ -41,14 +41,21 @@ namespace Kyalio.Core
 
             foreach (var entry in pages)
             {
-                if (entry.handler is IPageHandler pageHandler)
+                if (entry.pageObject == null)
                 {
-                    _pageMap[entry.pageType] = pageHandler;
-                    entry.handler.gameObject.SetActive(false);
+                    Debug.LogWarning($"[UIManager] pageObject is null for {entry.pageType}.");
+                    continue;
+                }
+
+                var handler = entry.pageObject.GetComponent<IPageHandler>();
+                if (handler != null)
+                {
+                    _pageMap[entry.pageType] = handler;
+                    entry.pageObject.SetActive(false);
                 }
                 else
                 {
-                    Debug.LogWarning($"[UIManager] {entry.handler?.name} does not implement IPageHandler.", entry.handler);
+                    Debug.LogWarning($"[UIManager] {entry.pageObject.name} has no IPageHandler component for {entry.pageType}.", entry.pageObject);
                 }
             }
         }

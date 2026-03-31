@@ -13,8 +13,8 @@ namespace Kyalio.Components
     /// <summary>
     /// A single row item for the Playlist.
     /// Attach to the PlaylistItemRow prefab.
-    /// Inspector: thumbnail, titleText, durationText, button,
-    ///            downloadButton, progressSlider, downloadStatusImage,
+    /// Inspector: thumbnail, titleText, durationText, playButton,
+    ///            downloadButton, downloadProgressSlider, downloadStatusImage,
     ///            downloadSprite, queuedSprite(optional), completeSprite
     /// </summary>
     public class PlaylistItemRow : MonoBehaviour
@@ -25,14 +25,14 @@ namespace Kyalio.Components
         [SerializeField] private TextMeshProUGUI descriptionText;
         [SerializeField] private TextMeshProUGUI durationText;
         [SerializeField] private TextMeshProUGUI sizeText;
-        [SerializeField] private Button button;
+        [SerializeField] private Button playButton;
 
         // ── Watch Progress UI ─────────────────────────────────────────
         [SerializeField] private Slider watchProgressSlider;
 
         // ── Download UI ───────────────────────────────────────────────
         [SerializeField] private Button downloadButton;
-        [SerializeField] private Slider progressSlider;
+        [SerializeField] private Slider downloadProgressSlider;
         [SerializeField] private Image downloadStatusImage;
         [SerializeField] private Sprite downloadSprite;
         [SerializeField] private Sprite queuedSprite;    // Optional; falls back to downloadSprite when null
@@ -56,7 +56,7 @@ namespace Kyalio.Components
         // ── Lifecycle ─────────────────────────────────────────────────
         private void Awake()
         {
-            button.onClick.AddListener(() => OnClicked?.Invoke(_item));
+            playButton.onClick.AddListener(() => OnClicked?.Invoke(_item));
 
             if (downloadButton != null)
                 downloadButton.onClick.AddListener(OnDownloadButtonClicked);
@@ -184,8 +184,8 @@ namespace Kyalio.Components
 
             downloadButton.gameObject.SetActive(showButton);
 
-            if (progressSlider != null)
-                progressSlider.gameObject.SetActive(state == DownloadUIState.Downloading);
+            if (downloadProgressSlider != null)
+                downloadProgressSlider.gameObject.SetActive(state == DownloadUIState.Downloading);
 
             if (downloadStatusImage != null)
             {
@@ -205,8 +205,8 @@ namespace Kyalio.Components
         private void HandleProgress(string projectId, string videoId, float progress)
         {
             if (!IsFor(projectId, videoId)) return;
-            if (progressSlider != null)
-                progressSlider.value = progress;
+            if (downloadProgressSlider != null)
+                downloadProgressSlider.value = progress;
             RefreshDownloadUI();
         }
 
