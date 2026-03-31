@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
+using Kyalio.Dev;
 using Kyalio.Models;
 using Kyalio.Repositories;
 using Kyalio.Services;
@@ -17,7 +18,7 @@ namespace Kyalio.Pages
     /// MyKyalio page: three horizontal project sections — Recently Watched, Downloads, Favorites.
     /// Inspector: recentlyWatchedSection, downloadsSection, favoritesSection
     /// </summary>
-    public class MyKyalioPage : MonoBehaviour, IPageHandler
+    public class MyKyalioPage : MonoBehaviour, IPageHandler, IDevFakeData
     {
         [SerializeField] private RecentlyWatchedSection recentlyWatchedSection;
         [SerializeField] private TopicSection downloadsSection;
@@ -37,7 +38,65 @@ namespace Kyalio.Pages
             if (favoritesSection != null)
                 favoritesSection.OnSeeAllClicked = () => UIManager.Instance.GoTo(PageType.MyFavorites);
 
+            if (DevFlags.UseFakeData) { LoadFakeData(); return; }
+
             LoadAsync(_cts.Token).Forget();
+        }
+
+        [ContextMenu("Load Fake Data")]
+        public void LoadFakeData()
+        {
+            var fakeProjects = new System.Collections.Generic.List<SubscribedProject>
+            {
+                new SubscribedProject { Id = "p001", Name = "Heart Anatomy VR",            CategoryName = "Cardiology", PlaylistCount = 3 },
+                new SubscribedProject { Id = "p003", Name = "Surgical Simulation Module 1",CategoryName = "Surgery",    PlaylistCount = 5 },
+                new SubscribedProject { Id = "p005", Name = "Brain MRI Interpretation",    CategoryName = "Neurology",  PlaylistCount = 4 },
+            };
+
+            var fakeHistory = new System.Collections.Generic.List<WatchHistoryProjectItem>
+            {
+                new WatchHistoryProjectItem
+                {
+                    ProjectId    = "p001",
+                    ProjectName  = "Heart Anatomy VR",
+                    CategoryName = "Cardiology",
+                    LatestEpisode = new WatchHistoryLatestEpisode { Title = "Introduction",  ProgressMs = 900_000,  DurationMs = 1_800_000, Ordinal = 1 },
+                },
+                new WatchHistoryProjectItem
+                {
+                    ProjectId    = "p003",
+                    ProjectName  = "Surgical Simulation Module 1",
+                    CategoryName = "Surgery",
+                    LatestEpisode = new WatchHistoryLatestEpisode { Title = "Episode 1",     ProgressMs = 240_000,  DurationMs = 2_400_000, Ordinal = 1 },
+                },
+            };
+
+            if (recentlyWatchedSection != null)
+            {
+                recentlyWatchedSection.gameObject.SetActive(true);
+                recentlyWatchedSection.OnProjectClicked = projectId =>
+                    UIManager.Instance.GoTo(PageType.ProjectInfo,
+                        new ProjectNavParam { ProjectId = projectId, Source = "direct" });
+                recentlyWatchedSection.Bind("Recently Watched", fakeHistory);
+            }
+
+            if (downloadsSection != null)
+            {
+                downloadsSection.gameObject.SetActive(true);
+                downloadsSection.OnProjectClicked = p =>
+                    UIManager.Instance.GoTo(PageType.ProjectInfo,
+                        new ProjectNavParam { ProjectId = p.Id, Source = "direct" });
+                downloadsSection.Bind("Downloads", fakeProjects);
+            }
+
+            if (favoritesSection != null)
+            {
+                favoritesSection.gameObject.SetActive(true);
+                favoritesSection.OnProjectClicked = p =>
+                    UIManager.Instance.GoTo(PageType.ProjectInfo,
+                        new ProjectNavParam { ProjectId = p.Id, Source = "favorites" });
+                favoritesSection.Bind("Favorites", fakeProjects);
+            }
         }
 
         public void OnExit()

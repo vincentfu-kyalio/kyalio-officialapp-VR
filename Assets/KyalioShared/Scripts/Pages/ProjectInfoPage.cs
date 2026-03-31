@@ -2,6 +2,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
+using Kyalio.Dev;
 using Kyalio.Models;
 using Kyalio.Repositories;
 using Kyalio.Services;
@@ -17,7 +18,7 @@ namespace Kyalio.Pages
     /// Video / programme detail page.
     /// param: string projectId
     /// </summary>
-    public class ProjectInfoPage : MonoBehaviour, IPageHandler
+    public class ProjectInfoPage : MonoBehaviour, IPageHandler, IDevFakeData
     {
         [Header("Header")]
         [SerializeField] private Image thumbnailImage;
@@ -105,7 +106,7 @@ namespace Kyalio.Pages
         {
             SubscribeDownloadEvents();
 
-            // Accept either ProjectNavParam (new) or bare string projectId (legacy)
+            // Parse param first — both real and fake modes need the projectId.
             string incomingId = null;
             if (param is ProjectNavParam nav)
             {
@@ -118,6 +119,18 @@ namespace Kyalio.Pages
                 incomingId           = s;
                 _entrySource         = "direct";
                 _sourceSearchEventId = null;
+            }
+
+            if (DevFlags.UseFakeData)
+            {
+                if (!string.IsNullOrEmpty(incomingId))
+                {
+                    _projectId    = incomingId;
+                    _startedAt    = System.DateTime.UtcNow;
+                    _videoStarted = false;
+                }
+                LoadFakeData();
+                return;
             }
 
             if (!string.IsNullOrEmpty(incomingId))
@@ -196,24 +209,8 @@ namespace Kyalio.Pages
                     .GetProjectDetailAsync(projectId, ct);
                 if (ct.IsCancellationRequested) return;
 
-                _currentDetail = detail;
                 ProjectCacheRepository.Instance.CacheDetail(detail);
-
-                if (titleText != null)       titleText.text       = detail.Name ?? string.Empty;
-                if (categoryText != null)    categoryText.text    = detail.CategoryName ?? string.Empty;
-                if (contributorText != null) contributorText.text = detail.DrName ?? string.Empty;
-                if (programText != null)     programText.text     = detail.ProgramName ?? string.Empty;
-                if (descriptionText != null) descriptionText.text = detail.Description ?? string.Empty;
-
-                if (durationText != null)
-                    durationText.text = FormatDuration(detail.PlaylistDurationSeconds);
-                if (videoTypeText != null)
-                    videoTypeText.text = ResolveVideoTypeLabel(detail);
-                if (sizeText != null)
-                    sizeText.text = FormatTotalSize(detail);
-
-                RefreshFavoriteButton();
-                RefreshDownloadAllUI();
+                BindDetail(detail);
 
                 if (thumbnailImage != null && !string.IsNullOrEmpty(detail.ThumbnailUrl))
                 {
@@ -226,29 +223,6 @@ namespace Kyalio.Pages
                         thumbnailImage.color  = Color.white;
                     }
                 }
-
-                var playlist = detail.Playlist ?? new System.Collections.Generic.List<PlaylistItem>();
-
-                RefreshPlaylistCountText(playlist.Count);
-
-                ClearPlaylistRows();
-
-                RefreshOverallProgress(playlist);
-
-                foreach (var item in playlist)
-                {
-                    var row = Instantiate(playlistItemPrefab, playlistContainer);
-                    row.OnClicked = playlistItem =>
-                    {
-                        _videoStarted = true;
-                        int idx = playlist.IndexOf(playlistItem);
-                        PlaybackState.Instance.SetPlaylist(playlist, idx >= 0 ? idx : 0);
-                        UIManager.Instance.GoTo(PageType.PlayVideo,
-                            new System.ValueTuple<string, PlaylistItem>(projectId, playlistItem));
-                    };
-                    row.OnConfirmRequested = (msg, yes, no) => ShowConfirmDialog(msg, yes, no);
-                    row.Bind(item, projectId);
-                }
             }
             catch (System.OperationCanceledException) { }
             catch (System.Exception e)
@@ -259,6 +233,130 @@ namespace Kyalio.Pages
             {
                 LoadingOverlay.Instance.Hide();
             }
+        }
+
+        private void BindDetail(ProjectDetail detail)
+        {
+            _currentDetail = detail;
+
+            if (titleText != null)       titleText.text       = detail.Name ?? string.Empty;
+            if (categoryText != null)    categoryText.text    = detail.CategoryName ?? string.Empty;
+            if (contributorText != null) contributorText.text = detail.DrName ?? string.Empty;
+            if (programText != null)     programText.text     = detail.ProgramName ?? string.Empty;
+            if (descriptionText != null) descriptionText.text = detail.Description ?? string.Empty;
+
+            if (durationText != null)
+                durationText.text = FormatDuration(detail.PlaylistDurationSeconds);
+            if (videoTypeText != null)
+                videoTypeText.text = ResolveVideoTypeLabel(detail);
+            if (sizeText != null)
+                sizeText.text = FormatTotalSize(detail);
+
+            RefreshFavoriteButton();
+            RefreshDownloadAllUI();
+
+            var playlist = detail.Playlist ?? new System.Collections.Generic.List<PlaylistItem>();
+            RefreshPlaylistCountText(playlist.Count);
+            ClearPlaylistRows();
+            RefreshOverallProgress(playlist);
+
+            foreach (var item in playlist)
+            {
+                var row = Instantiate(playlistItemPrefab, playlistContainer);
+                row.OnClicked = playlistItem =>
+                {
+                    _videoStarted = true;
+                    int idx = playlist.IndexOf(playlistItem);
+                    PlaybackState.Instance.SetPlaylist(playlist, idx >= 0 ? idx : 0);
+                    UIManager.Instance.GoTo(PageType.PlayVideo,
+                        new System.ValueTuple<string, PlaylistItem>(_projectId, playlistItem));
+                };
+                row.OnConfirmRequested = (msg, yes, no) => ShowConfirmDialog(msg, yes, no);
+                row.Bind(item, _projectId);
+            }
+        }
+
+        [ContextMenu("Load Fake Data")]
+        public void LoadFakeData()
+        {
+            // Look up the specific project that was navigated to.
+            // HomePage.LoadFakeData() pre-populates ProjectCacheRepository,
+            // so we can find any fake project by its ID here.
+            var project = ProjectCacheRepository.Instance.AllProjects
+                .Find(p => p.Id == _projectId);
+
+            var detail = project != null
+                ? BuildFakeDetail(project)
+                : BuildFallbackFakeDetail();
+
+            BindDetail(detail);
+        }
+
+        /// <summary>
+        /// Generates a ProjectDetail from a SubscribedProject using evenly distributed
+        /// fake playlist items. Called when the project exists in the fake data cache.
+        /// </summary>
+        private static ProjectDetail BuildFakeDetail(SubscribedProject project)
+        {
+            int count          = System.Math.Max(1, project.PlaylistCount);
+            long totalDurationMs = (long)project.PlaylistDurationSeconds * 1000L;
+            long episodeDurationMs = totalDurationMs / count;
+            long episodeSizeBytes  = 2_000_000_000L / count;
+
+            var playlist = new System.Collections.Generic.List<PlaylistItem>();
+            for (int i = 1; i <= count; i++)
+            {
+                playlist.Add(new PlaylistItem
+                {
+                    Ordinal        = i,
+                    Title          = $"Episode {i}",
+                    DurationMs     = (int?)episodeDurationMs,
+                    SizeBytes      = episodeSizeBytes,
+                    ProgressMs     = i == 1 ? (int)(episodeDurationMs * 0.4) : 0,
+                    MediaVideoId   = $"fake-vid-{project.Id}-{i:D2}",
+                    ProjectionType = i % 2 == 0 ? "360" : "180",
+                    StereoLayout   = i % 2 == 0 ? null  : "sbs",
+                });
+            }
+
+            return new ProjectDetail
+            {
+                Id                      = project.Id,
+                Name                    = project.Name,
+                CategoryName            = project.CategoryName,
+                DrName                  = project.DrName,
+                ProgramName             = project.ProgramName,
+                PlaylistDurationSeconds = project.PlaylistDurationSeconds,
+                PlaylistCount           = count,
+                Playlist                = playlist,
+            };
+        }
+
+        /// <summary>
+        /// Hardcoded fallback used when no matching project is found in the fake data cache
+        /// (e.g. DevBootstrapper navigates directly to ProjectInfo without going through HomePage).
+        /// </summary>
+        private static ProjectDetail BuildFallbackFakeDetail()
+        {
+            var playlist = new System.Collections.Generic.List<PlaylistItem>
+            {
+                new PlaylistItem { Ordinal = 1,  Title = "Introduction to VR Medicine",          DurationMs = 1_845_000, SizeBytes = 2_684_354_560L, ProgressMs = 923_000,   MediaVideoId = "fake-vid-001", StereoLayout = "sbs", ProjectionType = "180" },
+                new PlaylistItem { Ordinal = 2,  Title = "Surgical Simulation — Module 1",       DurationMs = 2_460_000, SizeBytes = 3_758_096_384L, ProgressMs = 0,         MediaVideoId = "fake-vid-002", StereoLayout = "sbs", ProjectionType = "180" },
+                new PlaylistItem { Ordinal = 3,  Title = "Patient Communication in VR",          DurationMs = 1_200_000, SizeBytes = 1_610_612_736L, ProgressMs = 1_200_000, MediaVideoId = "fake-vid-003", ProjectionType = "360" },
+                new PlaylistItem { Ordinal = 4,  Title = "Anatomy — The Cardiovascular System",  DurationMs = 1_560_000, SizeBytes = 2_147_483_648L, ProgressMs = 0,         MediaVideoId = "fake-vid-004", ProjectionType = "360" },
+                new PlaylistItem { Ordinal = 5,  Title = "Surgical Simulation — Module 2",       DurationMs = 2_700_000, SizeBytes = 3_221_225_472L, ProgressMs = 540_000,   MediaVideoId = "fake-vid-005", StereoLayout = "sbs", ProjectionType = "180" },
+            };
+
+            return new ProjectDetail
+            {
+                Id                      = "fake-project-001",
+                Name                    = "VR Medical Training Series",
+                CategoryName            = "Medical Education",
+                DrName                  = "Sarah Chen",
+                ProgramName             = "Advanced Clinical Skills Program",
+                PlaylistDurationSeconds = 9_765,
+                Playlist                = playlist,
+            };
         }
 
         // ── Download All — State Machine ──────────────────────────────

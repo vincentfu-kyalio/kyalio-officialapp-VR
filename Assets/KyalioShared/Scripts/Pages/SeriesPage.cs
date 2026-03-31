@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
+using Kyalio.Dev;
 using Kyalio.Models;
 using Kyalio.State;
 using UnityEngine;
@@ -17,7 +18,7 @@ namespace Kyalio.Pages
     ///   - "episodes": each section shows EpisodeCards → tapping plays the video directly
     /// Inspector: scrollContent, seriesSectionPrefab
     /// </summary>
-    public class SeriesPage : MonoBehaviour, IPageHandler
+    public class SeriesPage : MonoBehaviour, IPageHandler, IDevFakeData
     {
         [SerializeField] private Transform scrollContent;
         [SerializeField] private SeriesSection seriesSectionPrefab;
@@ -30,6 +31,8 @@ namespace Kyalio.Pages
 
         public void OnEnter(object param)
         {
+            if (DevFlags.UseFakeData) { LoadFakeData(); return; }
+
             if (_sections.Count > 0 &&
                 Time.realtimeSinceStartup - _lastFetchedAt < CacheTtlSeconds)
                 return;
@@ -37,6 +40,49 @@ namespace Kyalio.Pages
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
             LoadAsync(_cts.Token).Forget();
+        }
+
+        [ContextMenu("Load Fake Data")]
+        public void LoadFakeData()
+        {
+            ClearSections();
+
+            var roles = new List<RoleContentItem>
+            {
+                new RoleContentItem
+                {
+                    Id   = "fake-role-001",
+                    Name = "Cardiology",
+                    Projects = new List<SubscribedProject>
+                    {
+                        new SubscribedProject { Id = "p001", Name = "Heart Anatomy VR",          CategoryName = "Cardiology", PlaylistDurationSeconds = 2400, PlaylistCount = 3 },
+                        new SubscribedProject { Id = "p002", Name = "ECG Interpretation",        CategoryName = "Cardiology", PlaylistDurationSeconds = 1500, PlaylistCount = 2 },
+                        new SubscribedProject { Id = "p003", Name = "Cardiac Surgery Simulation",CategoryName = "Cardiology", PlaylistDurationSeconds = 3600, PlaylistCount = 5 },
+                    }
+                },
+                new RoleContentItem
+                {
+                    Id   = "fake-role-002",
+                    Name = "Neurology",
+                    Projects = new List<SubscribedProject>
+                    {
+                        new SubscribedProject { Id = "p004", Name = "Brain MRI Interpretation",  CategoryName = "Neurology",  PlaylistDurationSeconds = 2700, PlaylistCount = 4 },
+                        new SubscribedProject { Id = "p005", Name = "Stroke Response Training",  CategoryName = "Neurology",  PlaylistDurationSeconds = 1800, PlaylistCount = 2 },
+                    }
+                },
+            };
+
+            foreach (var role in roles)
+            {
+                if (role.Projects == null || role.Projects.Count == 0) continue;
+
+                var section = Instantiate(seriesSectionPrefab, scrollContent);
+                section.OnProjectClicked = p =>
+                    UIManager.Instance.GoTo(PageType.ProjectInfo,
+                        new ProjectNavParam { ProjectId = p.Id, Source = "roles_content" });
+                section.Bind(role);
+                _sections.Add(section);
+            }
         }
 
         public void OnExit()

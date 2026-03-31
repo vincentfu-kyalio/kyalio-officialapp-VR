@@ -16,41 +16,28 @@ namespace Kyalio.Components
     }
 
     /// <summary>
-    /// HomePage menu: fixed Explorer items (Latest Releases, Recommended) + dynamic Categories.
-    /// panelToggle.isOn controls the show/hide of menuBody.
-    /// Inspector:
-    ///   panelToggle       — Always-visible Toggle that opens/closes the entire menu
-    ///   menuBody          — Main menu body GameObject (controlled by panelToggle)
-    ///   togglePrefab      — Menu item Toggle (with TMP child)
-    ///   explorerContainer — Parent for fixed items
-    ///   categoryContainer — Parent for dynamic Category items
-    ///   toggleGroup       — ToggleGroup (ensures single selection)
+    /// HomePage left sidebar: fixed items (Latest Releases, Recommended) + dynamic Categories.
+    /// Each item is a Button; HomeMenuPanel tracks the selected item and toggles a
+    /// "SelectedIndicator" child GameObject on the prefab for visual feedback.
+    /// Inspector: menuItemPrefab, explorerContainer, categoryContainer
     /// </summary>
     public class HomeMenuPanel : MonoBehaviour
     {
-        [Header("Panel")]
-        [SerializeField] private Toggle panelToggle;
-        [SerializeField] private GameObject menuBody;
-
         [Header("Menu Items")]
-        [SerializeField] private Toggle togglePrefab;
+        [SerializeField] private Button menuItemPrefab;
         [SerializeField] private Transform explorerContainer;
         [SerializeField] private Transform categoryContainer;
-        [SerializeField] private ToggleGroup toggleGroup;
 
         public event System.Action<HomeMenuSelection> OnSelectionChanged;
 
         public HomeMenuSelection CurrentSelection { get; private set; }
 
-        private readonly List<Toggle> _toggles = new();
+        private readonly List<(Button button, HomeMenuSelection selection)> _items = new();
+        private Button _selectedButton;
 
         private void Awake()
         {
             CurrentSelection = new HomeMenuSelection { SelectionKind = HomeMenuSelection.Kind.LatestReleases };
-
-            if (panelToggle != null)
-                panelToggle.onValueChanged.AddListener(OnPanelToggleChanged);
-
             BuildExplorer();
         }
 
@@ -58,14 +45,17 @@ namespace Kyalio.Components
 
         public void BuildCategories(List<Category> categories)
         {
+            // Remove previously built category buttons
             foreach (Transform child in categoryContainer)
                 Destroy(child.gameObject);
+
+            _items.RemoveAll(item => item.button == null);
 
             if (categories == null) return;
 
             foreach (var cat in categories)
             {
-                CreateToggle(categoryContainer, cat.Name, new HomeMenuSelection
+                CreateItem(categoryContainer, cat.Name, new HomeMenuSelection
                 {
                     SelectionKind = HomeMenuSelection.Kind.Category,
                     CategoryId    = cat.Id,
@@ -76,40 +66,54 @@ namespace Kyalio.Components
 
         // ── Private ───────────────────────────────────────────────────
 
-        private void OnPanelToggleChanged(bool isOn)
-        {
-            if (menuBody != null)
-                menuBody.SetActive(isOn);
-        }
-
         private void BuildExplorer()
         {
-            var latestToggle = CreateToggle(explorerContainer, "Latest Releases",
+            var latestButton = CreateItem(explorerContainer, "Latest Releases",
                 new HomeMenuSelection { SelectionKind = HomeMenuSelection.Kind.LatestReleases });
-            CreateToggle(explorerContainer, "Recommended",
+
+            CreateItem(explorerContainer, "Recommended",
                 new HomeMenuSelection { SelectionKind = HomeMenuSelection.Kind.Recommended });
 
             // Pre-select Latest Releases without firing event (subscribers not yet attached)
-            latestToggle.SetIsOnWithoutNotify(true);
+            SetSelectedVisual(latestButton, true);
+            _selectedButton = latestButton;
         }
 
-        private Toggle CreateToggle(Transform parent, string label, HomeMenuSelection selection)
+        private Button CreateItem(Transform parent, string label, HomeMenuSelection selection)
         {
-            var toggle = Instantiate(togglePrefab, parent);
-            toggle.group = toggleGroup;
+            var button = Instantiate(menuItemPrefab, parent);
 
-            var text = toggle.GetComponentInChildren<TextMeshProUGUI>();
+            var text = button.GetComponentInChildren<TextMeshProUGUI>();
             if (text != null) text.text = label;
 
-            toggle.onValueChanged.AddListener(isOn =>
-            {
-                if (!isOn) return;
-                CurrentSelection = selection;
-                OnSelectionChanged?.Invoke(selection);
-            });
+            SetSelectedVisual(button, false);
+            button.onClick.AddListener(() => SelectItem(button, selection));
 
-            _toggles.Add(toggle);
-            return toggle;
+            _items.Add((button, selection));
+            return button;
+        }
+
+        private void SelectItem(Button button, HomeMenuSelection selection)
+        {
+            if (_selectedButton != null)
+                SetSelectedVisual(_selectedButton, false);
+
+            _selectedButton = button;
+            SetSelectedVisual(button, true);
+
+            CurrentSelection = selection;
+            OnSelectionChanged?.Invoke(selection);
+        }
+
+        /// <summary>
+        /// Looks for a child named "SelectedIndicator" on the button prefab and
+        /// shows or hides it. If the child doesn't exist, nothing happens.
+        /// </summary>
+        private static void SetSelectedVisual(Button button, bool selected)
+        {
+            var indicator = button.transform.Find("SelectedIndicator");
+            if (indicator != null)
+                indicator.gameObject.SetActive(selected);
         }
     }
 }
