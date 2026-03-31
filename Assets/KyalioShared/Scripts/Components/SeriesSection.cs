@@ -1,48 +1,37 @@
 using System.Collections.Generic;
 using Kyalio.Models;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace Kyalio.Components
 {
     /// <summary>
-    /// Grouped section block for the Series page (series_content.prefab).
+    /// Content area for the Series page right column.
     /// Supports two modes driven by GET /api/roles/content:
-    ///   - projects mode: Bind(RoleContentItem)   — shows ProjectCards
+    ///   - projects mode: Bind(RoleContentItem)        — shows ProjectCards
     ///   - episodes mode: BindEpisodes(RoleContentItem) — shows EpisodeCards
-    /// Inspector: titleText, seriesContent, titleButton, episodePrefab, episodeCardPrefab
+    /// Title and navigation are owned by SeriesPage; this component only manages card pooling.
+    /// Inspector: seriesContent, projectCardPrefab, episodeCardPrefab
     /// </summary>
     public class SeriesSection : MonoBehaviour
     {
-        [SerializeField] private TextMeshProUGUI titleText;
         [SerializeField] private Transform seriesContent;
-        [SerializeField] private Button titleButton;
-        [SerializeField] private ProjectCard episodePrefab;       // projects mode
-        [SerializeField] private EpisodeCard episodeCardPrefab;   // episodes mode
+        [SerializeField] private ProjectCard projectCardPrefab;
+        [SerializeField] private EpisodeCard episodeCardPrefab;
 
-        private string _roleId;
-
-        private readonly List<ProjectCard> _projectPool = new();
+        private readonly List<ProjectCard> _projectPool  = new();
         private readonly List<ProjectCard> _projectActive = new();
 
-        private readonly List<EpisodeCard> _episodePool = new();
+        private readonly List<EpisodeCard> _episodePool  = new();
         private readonly List<EpisodeCard> _episodeActive = new();
 
-        public System.Action<string> OnTitleClicked;
-        public System.Action<SubscribedProject> OnProjectClicked;
+        public System.Action<SubscribedProject>  OnProjectClicked;
         public System.Action<RoleContentEpisode> OnEpisodeClicked;
 
-        private void Awake()
-        {
-            titleButton?.onClick.AddListener(() => OnTitleClicked?.Invoke(_roleId));
-        }
+        // ── Public API ────────────────────────────────────────────────
 
         /// <summary>Projects mode — shows a ProjectCard per project.</summary>
         public void Bind(RoleContentItem role)
         {
-            _roleId = role.Id;
-            titleText.text = role.Name;
             ReturnAllEpisodes();
             ReturnAllProjects();
 
@@ -58,8 +47,6 @@ namespace Kyalio.Components
         /// <summary>Episodes mode — shows an EpisodeCard per episode.</summary>
         public void BindEpisodes(RoleContentItem role)
         {
-            _roleId = role.Id;
-            titleText.text = role.Name;
             ReturnAllProjects();
             ReturnAllEpisodes();
 
@@ -90,7 +77,7 @@ namespace Kyalio.Components
             }
             else
             {
-                card = Instantiate(episodePrefab, seriesContent);
+                card = Instantiate(projectCardPrefab, seriesContent);
             }
             card.gameObject.SetActive(true);
             _projectActive.Add(card);
