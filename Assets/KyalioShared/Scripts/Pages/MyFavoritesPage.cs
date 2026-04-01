@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
+using Kyalio.Dev;
 using Kyalio.Models;
 using Kyalio.Repositories;
 using Kyalio.State;
@@ -15,15 +16,14 @@ using UnityEngine.UI;
 namespace Kyalio.Pages
 {
     /// <summary>
-    /// Shared page for My Favorites and My Downloads.
-    /// Set _mode in the Inspector per GameObject.
+    /// Shared panel for Favorites and Downloads lists. Set _mode in the Inspector.
+    /// In fake data mode reads from FakeDataSeeder; otherwise calls the API / local state.
     ///
     /// Inspector:
-    ///   _mode, titleText, backButton
-    ///   editButton, deleteButton, cancelButton
-    ///   selectAllToggle (in edit bar)
+    ///   _mode, titleText
+    ///   editButton, deleteButton, cancelButton, selectAllToggle
+    ///   projectCountText (Favorites), videoCountText + totalSizeText (Downloads)
     ///   listContainer, itemPrefab
-    ///   confirmPopup, confirmMessage, confirmRemoveButton, confirmCancelButton
     /// </summary>
     public class MyFavoritesPage : MonoBehaviour, IPageHandler
     {
@@ -34,7 +34,6 @@ namespace Kyalio.Pages
 
         [Header("Header")]
         [SerializeField] private TextMeshProUGUI titleText;
-        [SerializeField] private Button backButton;
 
         [Header("Edit bar — normal mode")]
         [SerializeField] private Button editButton;
@@ -45,19 +44,13 @@ namespace Kyalio.Pages
         [SerializeField] private Toggle selectAllToggle;
 
         [Header("Summary")]
-        [SerializeField] private TextMeshProUGUI projectCountText;  // "?? projects"  (Favorites mode)
-        [SerializeField] private TextMeshProUGUI videoCountText;    // "?? videos"    (Downloads mode)
-        [SerializeField] private TextMeshProUGUI totalSizeText;     // "?? GB"        (Downloads mode)
+        [SerializeField] private TextMeshProUGUI projectCountText;  // Favorites mode
+        [SerializeField] private TextMeshProUGUI videoCountText;    // Downloads mode
+        [SerializeField] private TextMeshProUGUI totalSizeText;     // Downloads mode
 
         [Header("List")]
         [SerializeField] private Transform listContainer;
         [SerializeField] private SelectableListItem itemPrefab;
-
-        [Header("Confirm popup")]
-        [SerializeField] private GameObject confirmPopup;
-        [SerializeField] private TextMeshProUGUI confirmMessage;
-        [SerializeField] private Button confirmRemoveButton;
-        [SerializeField] private Button confirmCancelButton;
 
         // ── Runtime state ─────────────────────────────────────────────
 
@@ -70,13 +63,10 @@ namespace Kyalio.Pages
 
         private void Awake()
         {
-            backButton.onClick.AddListener(() => UIManager.Instance.GoBack());
             editButton.onClick.AddListener(EnterEditMode);
             cancelButton.onClick.AddListener(ExitEditMode);
             deleteButton.onClick.AddListener(ShowConfirmPopup);
             selectAllToggle.onValueChanged.AddListener(OnSelectAllChanged);
-            confirmRemoveButton.onClick.AddListener(() => OnConfirmRemoveAsync().Forget());
-            confirmCancelButton.onClick.AddListener(HideConfirmPopup);
         }
 
         // ── IPageHandler ──────────────────────────────────────────────
@@ -94,8 +84,17 @@ namespace Kyalio.Pages
                 totalSizeText.gameObject.SetActive(_mode == ListMode.Downloads);
 
             ExitEditMode();
-            HideConfirmPopup();
 
+            if (DevFlags.UseFakeData)
+            {
+                if (_mode == ListMode.Favorites)
+                    BindFavoriteItems(FakeDataSeeder.FakeFavorites);
+                else
+                    LoadDownloads();
+                return;
+            }
+
+            // Favorites: skip reload when cache is fresh
             if (_mode == ListMode.Favorites &&
                 !AppState.Instance.FavoritesDirty &&
                 _items.Count > 0)
@@ -109,7 +108,6 @@ namespace Kyalio.Pages
         public void OnExit()
         {
             _cts?.Cancel();
-            HideConfirmPopup();
         }
 
         // ── Load ──────────────────────────────────────────────────────
@@ -141,6 +139,13 @@ namespace Kyalio.Pages
             var items = response?.Items;
             if (items == null) return;
 
+            BindFavoriteItems(items);
+            AppState.Instance.ClearFavoritesDirty();
+        }
+
+        private void BindFavoriteItems(List<FavoriteItem> items)
+        {
+            ClearList();
             int count = 0;
             foreach (var fav in items)
             {
@@ -149,11 +154,8 @@ namespace Kyalio.Pages
                     fav.DrName, fav.ThumbnailUrl, fav.ProgramPicUrl, fav.VideoCount, true);
                 count++;
             }
-
             if (projectCountText != null)
                 projectCountText.text = $"{count} project{(count == 1 ? "" : "s")}";
-
-            AppState.Instance.ClearFavoritesDirty();
         }
 
         private void LoadDownloads()
@@ -287,24 +289,14 @@ namespace Kyalio.Pages
             if (_selectedIds.Count == 0) return;
 
             string listName = _mode == ListMode.Favorites ? "favorites" : "downloads";
-            if (confirmMessage != null)
-                confirmMessage.text =
-                    $"Are you sure to remove the selected video(s) from My {listName} list?";
-
-            if (confirmPopup != null)
-                confirmPopup.SetActive(true);
-        }
-
-        private void HideConfirmPopup()
-        {
-            if (confirmPopup != null)
-                confirmPopup.SetActive(false);
+            PopupManager.Instance.ShowDeleteCancel(
+                $"Are you sure to remove the selected video(s) from My {listName} list?",
+                onDelete: () => OnConfirmRemoveAsync().Forget()
+            );
         }
 
         private async UniTaskVoid OnConfirmRemoveAsync()
         {
-            HideConfirmPopup();
-
             var toDelete = new List<string>(_selectedIds);
             ExitEditMode();
 

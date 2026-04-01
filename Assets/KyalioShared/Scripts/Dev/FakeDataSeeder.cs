@@ -5,12 +5,15 @@ using Kyalio.Repositories;
 namespace Kyalio.Dev
 {
     /// <summary>
-    /// Populates ProjectCacheRepository with a consistent fake dataset at app startup.
+    /// Populates repositories with a consistent fake dataset at app startup.
     /// Called once by DevBootstrapper before navigating to any page, so every page
     /// has access to the same data regardless of which page is opened first.
+    /// Pages check DevFlags.UseFakeData and read from the static properties here.
     /// </summary>
     public static class FakeDataSeeder
     {
+        public static List<FavoriteItem> FakeFavorites { get; private set; }
+
         public static void Seed()
         {
             var categories = new List<Category>
@@ -72,6 +75,13 @@ namespace Kyalio.Dev
             {
                 new SubscriptionItem { Projects = projects, Categories = categories }
             });
+
+            FakeFavorites = new List<FavoriteItem>
+            {
+                new FavoriteItem { ProjectId = "p001", ProjectName = projects[0].Name,  CategoryName = projects[0].CategoryName,  DrName = projects[0].DrName,  VideoCount = projects[0].PlaylistCount },
+                new FavoriteItem { ProjectId = "p002", ProjectName = projects[1].Name,  CategoryName = projects[1].CategoryName,  DrName = projects[1].DrName,  VideoCount = projects[1].PlaylistCount },
+                new FavoriteItem { ProjectId = "p003", ProjectName = projects[2].Name,  CategoryName = projects[2].CategoryName,  DrName = projects[2].DrName,  VideoCount = projects[2].PlaylistCount },
+            };
         }
     }
 }

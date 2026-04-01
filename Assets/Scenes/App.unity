@@ -6254,7 +6254,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DevBootstrapper
   _useFakeData: 1
-  _startPage: 3
+  _startPage: 4
 --- !u!4 &1339866848
 Transform:
   m_ObjectHideFlags: 0
@@ -10974,9 +10974,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 3884687931937646182}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 555.2, y: -48.4}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 1000.4, y: 96.8}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &37130493287413044
@@ -13447,7 +13447,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &287243875385011561
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17081,7 +17081,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &659999065837853551
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -23471,9 +23471,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6568886347307090825}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 250.68, y: -251.84}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 431.36, y: 36.42}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1343306585714901063
@@ -32434,9 +32434,9 @@ RectTransform:
   - {fileID: 380962803517565402}
   m_Father: {fileID: 3884687931937646182}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 550.1, y: -441.84998}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 990.2, y: 650.1}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &2383684423351939010
@@ -36404,9 +36404,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6568886347307090825}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 250.68, y: -129}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 431.36, y: 36.42}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &2907161855818105108
@@ -39356,9 +39356,9 @@ RectTransform:
   m_Father: {fileID: 8744939466680652824}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -6.8, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &3225176086677490476
 CanvasRenderer:
@@ -43998,7 +43998,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: -0.00055313733}
-  m_SizeDelta: {x: 0, y: 1016.8999}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &3886679889328290898
 MonoBehaviour:
@@ -47539,7 +47539,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &4297476524561685277
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -47874,7 +47874,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Pages.MyFavoritesPage
   _mode: 1
   titleText: {fileID: 6309255506471714131}
-  backButton: {fileID: 0}
   editButton: {fileID: 2200036699782631991}
   deleteButton: {fileID: 156356891224477447}
   cancelButton: {fileID: 6385809403316087982}
@@ -47884,10 +47883,6 @@ MonoBehaviour:
   totalSizeText: {fileID: 2240239466515109506}
   listContainer: {fileID: 1127030503773582685}
   itemPrefab: {fileID: 9145906247044459505, guid: d38cd0b24553e6a4a8bd2d0480c297ce, type: 3}
-  confirmPopup: {fileID: 4506522222491527989}
-  confirmMessage: {fileID: 2958292267967423935}
-  confirmRemoveButton: {fileID: 7940793544523853608}
-  confirmCancelButton: {fileID: 8116534733357674657}
 --- !u!114 &4337446779463370574
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -48064,7 +48059,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &4361289270358547361
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -49323,7 +49318,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &4508818319059204005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -52969,7 +52964,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!1 &4918360131622921982
 GameObject:
   m_ObjectHideFlags: 0
@@ -55575,9 +55570,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6568886347307090825}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 179.035, y: -60.395}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 288.07, y: 50.79}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &5300889235183213938
@@ -56252,7 +56247,7 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1211236689020555717}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.3315375}
+  m_AnchorMin: {x: 0, y: 0.33153754}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
@@ -57754,9 +57749,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6568886347307090825}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 250.68, y: -190.41998}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 431.36, y: 36.42}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &5568746973701518637
@@ -66841,7 +66836,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 670.05}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &6571445345172116023
 CanvasRenderer:
@@ -67789,7 +67784,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &6671590835899691196
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -67804,7 +67799,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Pages.MyFavoritesPage
   _mode: 0
   titleText: {fileID: 5898718304849519849}
-  backButton: {fileID: 0}
   editButton: {fileID: 7588768257358071477}
   deleteButton: {fileID: 6078259613766582108}
   cancelButton: {fileID: 2659630869891774950}
@@ -67814,10 +67808,6 @@ MonoBehaviour:
   totalSizeText: {fileID: 0}
   listContainer: {fileID: 7870650411331971045}
   itemPrefab: {fileID: 9145906247044459505, guid: d38cd0b24553e6a4a8bd2d0480c297ce, type: 3}
-  confirmPopup: {fileID: 0}
-  confirmMessage: {fileID: 0}
-  confirmRemoveButton: {fileID: 0}
-  confirmCancelButton: {fileID: 0}
 --- !u!224 &6674589119008000421
 RectTransform:
   m_ObjectHideFlags: 0
@@ -72137,8 +72127,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7114437409695431806}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.25189298}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -74975,9 +74965,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6de438b2ce778c74aa2b255f7cd3ff4c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Pages.MyKyalioPage
-  recentlyWatchedSection: {fileID: 0}
-  downloadsSection: {fileID: 0}
-  favoritesSection: {fileID: 0}
+  recentlyWatchedButton: {fileID: 6985471070403055397}
+  favoritesButton: {fileID: 2816693397227958879}
+  downloadsButton: {fileID: 4155317463529655368}
+  recentlyWatchedPanel: {fileID: 8744931975037501926}
+  favoritesPanel: {fileID: 6671590835899691196}
+  downloadsPanel: {fileID: 4326758487053269366}
 --- !u!222 &7591894472543352201
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -76743,9 +76736,9 @@ RectTransform:
   m_Father: {fileID: 2971112078282265491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -6.8, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!224 &7778483227873275325
 RectTransform:
@@ -77211,13 +77204,14 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8744931975037501925}
+  - component: {fileID: 8744931975037501926}
   m_Layer: 5
   m_Name: recentWatch_content
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &7833585092448651996
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -80476,7 +80470,7 @@ RectTransform:
   m_Father: {fileID: 2602161131408122326}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -84265,6 +84259,22 @@ RectTransform:
   m_AnchoredPosition: {x: 223.81, y: -3.475}
   m_SizeDelta: {x: 1098.9, y: 760.8}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8744931975037501926
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7833358394229949407}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff41fd93eae0d4b488e682fda8280ae6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Components.RecentlyWatchedSection
+  titleText: {fileID: 7610801615405415077}
+  seeAllButton: {fileID: 0}
+  slideContent: {fileID: 2378107857094142113}
+  cardPrefab: {fileID: 8958166081803621154, guid: 1efdb8e2520aa71428ddadb876fb4883, type: 3}
 --- !u!224 &8744939466680652824
 RectTransform:
   m_ObjectHideFlags: 0
@@ -84462,7 +84472,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!1 &8761457725686178706
 GameObject:
   m_ObjectHideFlags: 0
