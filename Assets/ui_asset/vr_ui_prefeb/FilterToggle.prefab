@@ -296,7 +296,7 @@ GameObject:
   - component: {fileID: 330498341799742974}
   - component: {fileID: 3129915622110036615}
   m_Layer: 5
-  m_Name: filter_Toggle
+  m_Name: FilterToggle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

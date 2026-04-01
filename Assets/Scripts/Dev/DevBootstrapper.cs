@@ -21,6 +21,9 @@ public class DevBootstrapper : MonoBehaviour
         DevFlags.UseFakeData = _useFakeData;
 
         if (_useFakeData)
+        {
+            FakeDataSeeder.Seed();
             UIManager.Instance.GoTo(_startPage);
+        }
     }
 }
