@@ -2,13 +2,14 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Models;
+using Newtonsoft.Json;
 
 namespace Kyalio.Services
 {
     /// <summary>
     /// Handles the Quest pairing flow:
-    ///   POST /api/pair/request  — request a 6-digit code
-    ///   GET  /api/pair/poll/{code} — poll until verified
+    ///   POST /api/pair/request          — request a 6-digit code
+    ///   GET  /api/pair/stream/{code}    — SSE stream until verified or expired
     ///
     /// Both endpoints require the X-Quest-Key header (no Bearer token).
     /// </summary>
@@ -29,11 +30,21 @@ namespace Kyalio.Services
                 _questKeyHeader, ct);
 
         /// <summary>
-        /// GET /api/pair/poll/{code} — returns pending or verified.
-        /// Throws ApiException(404) when the code has expired or already been consumed.
+        /// GET /api/pair/stream/{code} — SSE stream until a terminal event arrives.
+        /// Returns a <see cref="PairPollResponse"/> with Status "verified" (+ Credential)
+        /// or "expired". Throws ApiException(404) if the code is not found before the
+        /// stream opens.
         /// </summary>
-        public UniTask<PairPollResponse> PollAsync(string code, CancellationToken ct = default)
-            => _client.GetAsync<PairPollResponse>($"/api/pair/poll/{code}",
-                _questKeyHeader, ct);
+        public UniTask<PairPollResponse> StreamAsync(string code, CancellationToken ct = default)
+            => _client.SseAsync<PairPollResponse>(
+                $"/api/pair/stream/{code}",
+                _questKeyHeader,
+                (eventName, data) => eventName switch
+                {
+                    "verified" => JsonConvert.DeserializeObject<PairPollResponse>(data),
+                    "expired"  => new PairPollResponse { Status = "expired" },
+                    _          => null  // "pending" — keep listening
+                },
+                ct);
     }
 }

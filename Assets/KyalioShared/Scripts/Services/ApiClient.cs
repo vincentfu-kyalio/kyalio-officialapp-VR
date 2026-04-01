@@ -65,6 +65,59 @@ namespace Kyalio.Services
         public UniTask DeleteAsync(string path, CancellationToken ct = default)
             => SendNoContentAsync(UnityWebRequest.kHttpVerbDELETE, path, null, null, ct);
 
+        /// <summary>
+        /// Opens a Server-Sent Events GET connection. Calls <paramref name="onEvent"/> for each
+        /// received event; returns the first non-null value it produces.
+        /// Throws <see cref="ApiException"/> on HTTP error (e.g. 403, 404).
+        /// </summary>
+        public async UniTask<T> SseAsync<T>(
+            string path,
+            IReadOnlyDictionary<string, string> extraHeaders,
+            Func<string, string, T> onEvent,
+            CancellationToken ct = default) where T : class
+        {
+            var url = _baseUrl + path;
+            T terminalResult = null;
+
+            using var req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbGET);
+            req.SetRequestHeader("Accept", "text/event-stream");
+            req.SetRequestHeader("Cache-Control", "no-cache");
+            if (!string.IsNullOrEmpty(_token))
+                req.SetRequestHeader("Authorization", $"Bearer {_token}");
+            if (extraHeaders != null)
+                foreach (var kv in extraHeaders)
+                    req.SetRequestHeader(kv.Key, kv.Value);
+
+            req.downloadHandler = new SseDownloadHandler((eventName, data) =>
+            {
+                if (terminalResult == null)
+                    terminalResult = onEvent(eventName, data);
+            });
+
+            try
+            {
+                await req.SendWebRequest().ToUniTask(cancellationToken: ct);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { /* fall through to check result */ }
+
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                var body = req.downloadHandler?.text ?? "";
+                var code = (int)req.responseCode;
+                if (code >= 500)
+                    Debug.LogError($"[ApiClient] SSE {url} \u2192 {code}\n{body}");
+                else
+                    Debug.LogWarning($"[ApiClient] SSE {url} \u2192 {code}\n{body}");
+                throw new ApiException(code, body);
+            }
+
+            if (terminalResult != null)
+                return terminalResult;
+
+            throw new InvalidOperationException($"[ApiClient] SSE {url} closed without a terminal event.");
+        }
+
         private async UniTask<T> SendAsync<T>(
             string method, string path, string jsonBody,
             IReadOnlyDictionary<string, string> extraHeaders, CancellationToken ct)

@@ -16,10 +16,10 @@ namespace Kyalio.Pages
     ///
     /// Flow:
     ///   1. OnEnter → POST /api/pair/request → display 6-digit code across the six digit labels.
-    ///   2. Poll GET /api/pair/poll/{code} every 3 seconds.
+    ///   2. Open SSE connection to GET /api/pair/stream/{code} and wait for a terminal event.
     ///   3. On "verified" → store Bearer token in ApiClient, show "Paired successfully!" popup.
     ///   4. Popup Done → activate TabBar, navigate to Home.
-    ///   5. On 404 (code expired) → automatically request a new code.
+    ///   5. On "expired" or 404 → automatically request a new code.
     ///
     /// API config (base URL + Quest key) is set once on AppBootstrapper and stored in
     /// ServiceLocator — this page reads QuestPairingService directly from there.
@@ -65,7 +65,7 @@ namespace Kyalio.Pages
 
                 DisplayCode(response.Code);
                 SetLoading(false);
-                await PollUntilVerifiedAsync(response.Code, ct);
+                await StreamUntilVerifiedAsync(response.Code, ct);
             }
             catch (OperationCanceledException) { }
             catch (Exception e)
@@ -75,55 +75,49 @@ namespace Kyalio.Pages
             }
         }
 
-        private async UniTask PollUntilVerifiedAsync(string code, CancellationToken ct)
+        private async UniTask StreamUntilVerifiedAsync(string code, CancellationToken ct)
         {
-            while (!ct.IsCancellationRequested)
+            PairPollResponse result;
+            try
             {
-                await UniTask.Delay(3000, cancellationToken: ct);
+                result = await ServiceLocator.Instance.QuestPairingService
+                    .StreamAsync(code, ct);
+            }
+            catch (ApiException ex) when (ex.StatusCode == 404)
+            {
+                Debug.Log("[LoginPage] Pair code not found; requesting a new code.");
+                ClearDigits();
+                SetLoading(true);
+                StartPairingAsync(ct).Forget();
+                return;
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[LoginPage] SSE error: {e.Message}");
+                return;
+            }
 
-                PairPollResponse poll;
-                try
+            Debug.Log($"[LoginPage] SSE status: '{result?.Status ?? "(null)"}'");
+
+            if (string.Equals(result?.Status, "verified", StringComparison.OrdinalIgnoreCase))
+            {
+                if (result.Credential == null)
                 {
-                    poll = await ServiceLocator.Instance.QuestPairingService
-                        .PollAsync(code, ct);
-                }
-                catch (ApiException ex) when (ex.StatusCode == 404)
-                {
-                    // Code expired — request a fresh one
-                    Debug.Log("[LoginPage] Pair code expired; requesting a new code.");
-                    ClearDigits();
-                    SetLoading(true);
-                    StartPairingAsync(ct).Forget();
+                    Debug.LogError("[LoginPage] Verified response is missing credential — aborting.");
+                    SetLoading(false);
                     return;
                 }
-                catch (OperationCanceledException) { return; }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"[LoginPage] Poll error: {e.Message}");
-                    continue;
-                }
+                OnPairingVerified(result.Credential);
+                return;
+            }
 
-                Debug.Log($"[LoginPage] Poll status: '{poll?.Status ?? "(null response)"}'");
-
-                if (poll == null)
-                {
-                    Debug.LogWarning("[LoginPage] Poll returned a null response body.");
-                    continue;
-                }
-
-                if (string.Equals(poll.Status, "verified", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (poll.Credential == null)
-                    {
-                        // Treat a verified-but-no-credential response as a fatal pairing
-                        // failure — stop polling and show an error rather than looping.
-                        Debug.LogError("[LoginPage] Verified response is missing credential — aborting.");
-                        SetLoading(false);
-                        return;
-                    }
-                    OnPairingVerified(poll.Credential);
-                    return;
-                }
+            if (string.Equals(result?.Status, "expired", StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.Log("[LoginPage] Pair code expired; requesting a new code.");
+                ClearDigits();
+                SetLoading(true);
+                StartPairingAsync(ct).Forget();
             }
         }
 

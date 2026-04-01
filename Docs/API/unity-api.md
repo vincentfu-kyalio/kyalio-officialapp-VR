@@ -14,7 +14,7 @@ Base URL:
 | Client | Endpoint group | Auth mechanism |
 |--------|---------------|----------------|
 | Mobile App | `POST /api/auth/login`, `POST /api/auth/forgot-password` | `X-App-Key` header (no Bearer) |
-| Quest App | `POST /api/pair/request`, `GET /api/pair/poll/{code}` | `X-Quest-Key` header (no Bearer) |
+| Quest App | `POST /api/pair/request`, `GET /api/pair/stream/{code}` | `X-Quest-Key` header (no Bearer) |
 | Mobile & Quest | All other `/api/*` | `Authorization: Bearer <token>` |
 
 ```http
@@ -35,8 +35,11 @@ Authorization: Bearer <token>
 ## Basic Flow — Quest App
 
 1. Call `POST /api/pair/request` with `X-Quest-Key` → display the 6-digit `code` on screen
-2. Poll `GET /api/pair/poll/{code}` every 3 seconds with `X-Quest-Key`
-3. When `status` becomes `verified`, store `credential.token` and `credential.expiresAt` — stop polling
+2. Open SSE connection to `GET /api/pair/stream/{code}` with `X-Quest-Key`
+3. Listen for events:
+   - `pending` — still waiting, keep connection open
+   - `verified` — store `credential.token` and `credential.expiresAt`, close connection
+   - `expired` — code expired, return to step 1
 4. Call `GET /api/subscriptions` with the new Bearer token → store subscription packages and project list
 5. Before each subsequent API call, check if token is expired. If expired, return to step 1 (re-pair).
 
@@ -75,7 +78,47 @@ Rate limited: 5 requests per IP per minute.
 
 ---
 
-### `GET /api/pair/poll/{code}`
+### `GET /api/pair/stream/{code}` (SSE — recommended)
+
+Required header:
+
+```http
+X-Quest-Key: <QUEST_APP_API_KEY>
+```
+
+Opens a Server-Sent Events stream. The server polls KV every 3 seconds and pushes events until the code is verified or expires. The connection closes automatically.
+
+Event: `pending` — still waiting:
+
+```
+event: pending
+data: {"status":"pending"}
+```
+
+Event: `verified` — credential ready (one-time — entry is deleted immediately):
+
+```
+event: verified
+data: {"status":"verified","credential":{"token":"<jwt-token>","tokenType":"Bearer","expiresAt":"2026-03-19T22:00:00.000Z"}}
+```
+
+Event: `expired` — code expired or not found:
+
+```
+event: expired
+data: {"error":"Code expired"}
+```
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `200` | SSE stream opened |
+| `403` | Missing or invalid X-Quest-Key |
+| `404` | Code not found or already expired before stream opened |
+| `429` | Too many failed attempts from this IP |
+
+---
+
+### `GET /api/pair/poll/{code}` (legacy polling — kept for backward compatibility)
 
 Required header:
 
@@ -221,7 +264,8 @@ Rate limited: 5 attempts per email per hour, 10 per IP per 15 minutes. 60-second
 ### Quest Key only (no Bearer)
 
 - `POST /api/pair/request`
-- `GET /api/pair/poll/{code}`
+- `GET /api/pair/stream/{code}` (SSE — recommended)
+- `GET /api/pair/poll/{code}` (legacy)
 
 ### Bearer Required (Mobile + Quest)
 
