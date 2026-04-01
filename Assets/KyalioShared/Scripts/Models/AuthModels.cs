@@ -47,4 +47,30 @@ namespace Kyalio.Models
         [JsonProperty("code")]
         public string Code;
     }
+
+    public class PairRequestBody
+    {
+        [JsonProperty("model")]    public string Model;
+        [JsonProperty("serial")]   public string Serial;
+        [JsonProperty("appVersion")] public string AppVersion;
+    }
+
+    public class PairRequestResponse
+    {
+        [JsonProperty("code")]      public string Code;
+        [JsonProperty("expiresAt")] public string ExpiresAt;
+    }
+
+    public class PairPollCredential
+    {
+        [JsonProperty("token")]     public string Token;
+        [JsonProperty("tokenType")] public string TokenType;
+        [JsonProperty("expiresAt")] public string ExpiresAt;
+    }
+
+    public class PairPollResponse
+    {
+        [JsonProperty("status")]     public string Status;
+        [JsonProperty("credential")] public PairPollCredential Credential;
+    }
 }

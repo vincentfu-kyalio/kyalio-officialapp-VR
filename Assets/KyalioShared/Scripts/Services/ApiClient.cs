@@ -30,6 +30,11 @@ namespace Kyalio.Services
         public UniTask<T> GetAsync<T>(string path, CancellationToken ct = default)
             => SendAsync<T>(UnityWebRequest.kHttpVerbGET, path, null, null, ct);
 
+        public UniTask<T> GetAsync<T>(string path,
+            IReadOnlyDictionary<string, string> extraHeaders,
+            CancellationToken ct = default)
+            => SendAsync<T>(UnityWebRequest.kHttpVerbGET, path, null, extraHeaders, ct);
+
         public UniTask<T> PostAsync<T>(string path, object body,
             IReadOnlyDictionary<string, string> extraHeaders = null,
             CancellationToken ct = default)
