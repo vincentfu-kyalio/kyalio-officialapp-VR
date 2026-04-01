@@ -58,12 +58,6 @@ namespace Kyalio.Pages
         [SerializeField] private Sprite downloadAllDownloadSprite;
         [SerializeField] private Sprite downloadAllCompleteSprite;
 
-        // Confirm Dialog (shared)
-        [SerializeField] private GameObject confirmDialog;
-        [SerializeField] private Button dialogYesButton;
-        [SerializeField] private Button dialogCancelButton;
-        [SerializeField] private TextMeshProUGUI dialogMessageText;
-
         private string _projectId;
         private string _entrySource;
         private string _sourceSearchEventId;
@@ -71,8 +65,6 @@ namespace Kyalio.Pages
         private bool _videoStarted;
         private ProjectDetail _currentDetail;
         private CancellationTokenSource _cts;
-        private System.Action _dialogYesAction;
-        private System.Action _dialogNoAction;
 
         private void OnValidate()
         {
@@ -93,13 +85,6 @@ namespace Kyalio.Pages
                 playAllButton.onClick.AddListener(OnPlayAll);
             if (downloadAllButton != null)
                 downloadAllButton.onClick.AddListener(() => OnDownloadAllClickAsync().Forget());
-
-            if (dialogYesButton != null)
-                dialogYesButton.onClick.AddListener(OnDialogYes);
-            if (dialogCancelButton != null)
-                dialogCancelButton.onClick.AddListener(OnDialogCancel);
-            if (confirmDialog != null)
-                confirmDialog.SetActive(false);
         }
 
         public void OnEnter(object param)
@@ -164,11 +149,6 @@ namespace Kyalio.Pages
             _cts?.Cancel();
             _cts?.Dispose();
             _cts = null;
-
-            if (confirmDialog != null)
-                confirmDialog.SetActive(false);
-            _dialogYesAction = null;
-            _dialogNoAction  = null;
 
             ReportPageSessionAsync().Forget();
         }
@@ -266,7 +246,7 @@ namespace Kyalio.Pages
                     UIManager.Instance.GoTo(PageType.PlayVideo,
                         new System.ValueTuple<string, PlaylistItem>(_projectId, playlistItem));
                 };
-                row.OnConfirmRequested = (msg, yes, no) => ShowConfirmDialog(msg, yes, no);
+                row.OnConfirmRequested = (msg, yes, no) => PopupManager.Instance.ShowYesNo(msg, yes, no);
                 row.Bind(item, _projectId);
             }
         }
@@ -512,7 +492,7 @@ namespace Kyalio.Pages
             {
                 bool confirmed = false;
                 var tcs = new UniTaskCompletionSource();
-                ShowConfirmDialog(
+                PopupManager.Instance.ShowYesNo(
                     "Delete all downloaded episodes?",
                     () => { confirmed = true; tcs.TrySetResult(); },
                     () => tcs.TrySetResult()
@@ -533,7 +513,7 @@ namespace Kyalio.Pages
             {
                 bool confirmed = false;
                 var tcs = new UniTaskCompletionSource();
-                ShowConfirmDialog(
+                PopupManager.Instance.ShowYesNo(
                     "Cancel all downloading episodes?",
                     () => { confirmed = true; tcs.TrySetResult(); },
                     () => tcs.TrySetResult()
@@ -566,7 +546,7 @@ namespace Kyalio.Pages
                 {
                     bool confirmed = false;
                     var tcs = new UniTaskCompletionSource();
-                    ShowConfirmDialog(
+                    PopupManager.Instance.ShowYesNo(
                         "You're on mobile data. Download all episodes?",
                         () => { confirmed = true; tcs.TrySetResult(); },
                         () => tcs.TrySetResult()
@@ -761,33 +741,5 @@ namespace Kyalio.Pages
             return $"{total / 1024.0:F0} KB";
         }
 
-        // ── Confirm Dialog ────────────────────────────────────────────
-        private void ShowConfirmDialog(string message, System.Action onYes, System.Action onNo = null)
-        {
-            if (confirmDialog == null) return;
-            if (dialogMessageText != null)
-                dialogMessageText.text = message;
-            _dialogYesAction = onYes;
-            _dialogNoAction  = onNo;
-            confirmDialog.SetActive(true);
-        }
-
-        private void OnDialogYes()
-        {
-            confirmDialog.SetActive(false);
-            var action = _dialogYesAction;
-            _dialogYesAction = null;
-            _dialogNoAction  = null;
-            action?.Invoke();
-        }
-
-        private void OnDialogCancel()
-        {
-            confirmDialog.SetActive(false);
-            var action = _dialogNoAction;
-            _dialogYesAction = null;
-            _dialogNoAction  = null;
-            action?.Invoke();
-        }
     }
 }
