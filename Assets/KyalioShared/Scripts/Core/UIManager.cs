@@ -61,6 +61,21 @@ namespace Kyalio.Core
         }
 
         /// <summary>
+        /// Switch to a top-level page (tab navigation).
+        /// Clears the history stack so GoBack cannot leave the new page.
+        /// Use this from TabBar; use GoTo for deep navigation within a tab.
+        /// </summary>
+        public void SwitchPage(PageType pageType)
+        {
+            if (_currentPage.HasValue)
+                ExitPage(_currentPage.Value);
+
+            _history.Clear();
+            EnterPage(pageType, null);
+            _currentPage = pageType;
+        }
+
+        /// <summary>
         /// Navigate to a page, pushing the current page onto the history stack.
         /// Pass null for param when no data needs to be forwarded.
         /// </summary>
