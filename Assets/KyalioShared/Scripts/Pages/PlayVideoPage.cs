@@ -323,10 +323,19 @@ namespace Kyalio.Pages
             if (_pendingResumeMs > 0)
             {
                 double seekSecs = _pendingResumeMs / 1000.0;
+
+                // Prefer AVPro's reported duration; fall back to the API value when AVPro
+                // hasn't resolved it yet (returns 0 on some streams at MetaDataReady).
                 double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
-                // Skip resume if the saved position is within the last 5% (treat as completed)
-                if (duration > 0 && seekSecs < duration * 0.95)
+                if (duration <= 0 && _currentItem?.DurationMs > 0)
+                    duration = _currentItem.DurationMs.Value / 1000.0;
+
+                // If duration is known and the saved position is in the last 5%,
+                // treat the episode as completed and play from the beginning.
+                bool isCompleted = duration > 0 && seekSecs >= duration * 0.95;
+                if (!isCompleted)
                     _mediaPlayer.Control?.Seek(seekSecs);
+
                 _pendingResumeMs = 0;
             }
 
