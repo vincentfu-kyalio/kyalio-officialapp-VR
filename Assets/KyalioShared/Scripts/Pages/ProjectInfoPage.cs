@@ -202,7 +202,6 @@ namespace Kyalio.Pages
         // ── Load ──────────────────────────────────────────────────────
         private async UniTaskVoid LoadAsync(string projectId, CancellationToken ct)
         {
-            LoadingOverlay.Instance.Show();
             try
             {
                 var detail = await ServiceLocator.Instance.ProjectService
@@ -228,10 +227,6 @@ namespace Kyalio.Pages
             catch (System.Exception e)
             {
                 Debug.LogError($"[ProjectInfoPage] Load failed: {e.Message}");
-            }
-            finally
-            {
-                LoadingOverlay.Instance.Hide();
             }
         }
 

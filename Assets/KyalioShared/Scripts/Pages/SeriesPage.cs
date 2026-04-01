@@ -113,7 +113,6 @@ namespace Kyalio.Pages
 
         private async UniTaskVoid LoadAsync(CancellationToken ct)
         {
-            LoadingOverlay.Instance.Show();
             try
             {
                 var response = await ServiceLocator.Instance.ProjectService
@@ -128,7 +127,6 @@ namespace Kyalio.Pages
             }
             catch (OperationCanceledException) { }
             catch (Exception e) { Debug.LogError($"[SeriesPage] Load failed: {e.Message}"); }
-            finally { LoadingOverlay.Instance.Hide(); }
         }
 
         private void SetupRoles(List<RoleContentItem> roles)

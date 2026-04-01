@@ -119,7 +119,6 @@ namespace Kyalio.Pages
 
             if (!needsFresh) return;
 
-            LoadingOverlay.Instance.Show();
             try
             {
                 var response = await ServiceLocator.Instance.WatchHistoryService
@@ -136,7 +135,6 @@ namespace Kyalio.Pages
             }
             catch (OperationCanceledException) { }
             catch (Exception e) { Debug.LogError($"[MyKyalioPage] Watch history load failed: {e.Message}"); }
-            finally { if (!ct.IsCancellationRequested) LoadingOverlay.Instance.Hide(); }
         }
 
         private void BindRecentlyWatched(List<WatchHistoryProjectItem> items)

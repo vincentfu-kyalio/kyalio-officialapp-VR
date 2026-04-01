@@ -1723,7 +1723,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!108 &410087040
 Light:
   m_ObjectHideFlags: 0
@@ -4152,13 +4152,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 802537322}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 3, y: 3, z: 3}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 1331858730}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
 --- !u!114 &802537324
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4453,7 +4453,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &832575518
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4709,6 +4709,7 @@ GameObject:
   m_Component:
   - component: {fileID: 924533033}
   - component: {fileID: 924533034}
+  - component: {fileID: 924533035}
   m_Layer: 0
   m_Name: AppManager
   m_TagString: Untagged
@@ -4747,6 +4748,18 @@ MonoBehaviour:
   _questAppApiKey: ff6db06a31a9a55c18a9486c6b719d527f289c7e291bea3aa1a9010bdc05cfe
   _useFakeData: 0
   _devStartPage: 1
+--- !u!114 &924533035
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 924533032}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c283cea698e99544ca8f685190639526, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Services.DownloadManager
 --- !u!1 &938545222
 GameObject:
   m_ObjectHideFlags: 0
@@ -8129,7 +8142,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -35367,6 +35380,7 @@ GameObject:
   - component: {fileID: 158920098475643489}
   - component: {fileID: 2683491887866614223}
   - component: {fileID: 5494504725129022357}
+  - component: {fileID: 5494504725129022358}
   m_Layer: 5
   m_Name: vr_video_controll_ui
   m_TagString: Untagged
@@ -35968,7 +35982,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &2734228181814436184
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -38731,7 +38745,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 77e6a18cf4a592f499704227910d33e3, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 202c97ee9bef81f42b8c6ed4d8db2e74, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -40786,7 +40800,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 1.1176}
-  m_SizeDelta: {x: 1920, y: 1080}
+  m_SizeDelta: {x: 7680, y: 4320}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &3322924131524110808
 RectTransform:
@@ -50145,7 +50159,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &4508818319059204005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -57925,6 +57939,40 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &5494504725129022358
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2632613788384957044}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0d3271f4fb5706143839d3407b335134, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Pages.PlayVideoPage
+  _mediaPlayer: {fileID: 1968365146}
+  _avProRoot: {fileID: 1331858729}
+  _tabBarRoot: {fileID: 7973857900773026512}
+  _homeButton: {fileID: 232685760983251422}
+  _playPauseButton: {fileID: 588459910197860266}
+  _playPauseIcon: {fileID: 676543157517296454}
+  _playSprite: {fileID: 21300000, guid: 1fc0d6a810b7ff54cb67f0a1333ee53d, type: 3}
+  _pauseSprite: {fileID: 21300000, guid: 845645275d469ac449cbcfae0ed30da9, type: 3}
+  _skipForwardButton: {fileID: 1237160048124610512}
+  _skipBackwardButton: {fileID: 4268965999597512765}
+  _nextButton: {fileID: 8675282321618701429}
+  _prevButton: {fileID: 451759592258703720}
+  _progressSlider: {fileID: 6826192680278074148}
+  _currentTimeText: {fileID: 858336477873364290}
+  _durationText: {fileID: 6294661448819268400}
+  _speedButton: {fileID: 4020892843560634399}
+  _speedText: {fileID: 5750267530236445110}
+  _speedPanel: {fileID: 6136093535173054004}
+  _speedPanelCloseButton: {fileID: 5068449228513827925}
+  _speed1Toggle: {fileID: 7668022972830202224}
+  _speed125Toggle: {fileID: 3352223403181512769}
+  _speed15Toggle: {fileID: 6276653146151049335}
 --- !u!114 &5495732363922025778
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -79741,7 +79789,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 154, y: -355}
+  m_AnchoredPosition: {x: 3008, y: -355}
   m_SizeDelta: {x: 130, y: 710}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &8022137030715903929

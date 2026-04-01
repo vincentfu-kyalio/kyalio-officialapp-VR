@@ -1,0 +1,511 @@
+using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using Kyalio.Core;
+using Kyalio.Dev;
+using Kyalio.Models;
+using Kyalio.State;
+using Kyalio.Utils;
+using AppPlaybackState = Kyalio.State.PlaybackState;
+using RenderHeads.Media.AVProVideo;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace Kyalio.Pages
+{
+    /// <summary>
+    /// Video player page powered by AVPro MediaPlayer.
+    ///
+    /// Param: ValueTuple&lt;string, PlaylistItem&gt; — (projectId, episode to play).
+    /// Set by ProjectInfoPage (full playlist) or SeriesPage (single episode).
+    ///
+    /// On enter:
+    ///   — Hides TabBar and all other pages (UIManager handles page hiding).
+    ///   — Prefers a locally downloaded file; falls back to a stream URL from the API.
+    ///   — Seeks to the episode's last saved progress before playing.
+    ///   — Syncs watch progress every 10 s while playing.
+    ///   — Refreshes the stream URL automatically 60 s before token expiry.
+    ///
+    /// On exit:
+    ///   — Saves final watch progress.
+    ///   — Closes media and restores TabBar.
+    ///
+    /// Inspector:
+    ///   _mediaPlayer          — MediaPlayer component (child of the AVPro root object)
+    ///   _tabBarRoot           — root GameObject of the TabBar (hidden during playback)
+    ///   _homeButton           — navigates back (GoBack)
+    ///   _playPauseButton      — play / pause toggle
+    ///   _playPauseIcon        — Image that swaps between _playSprite / _pauseSprite
+    ///   _skipForwardButton    — seek +10 s
+    ///   _skipBackwardButton   — seek -10 s
+    ///   _nextButton           — next episode in playlist
+    ///   _prevButton           — previous episode in playlist
+    ///   _progressSlider       — scrub bar (value 0–1)
+    ///   _currentTimeText      — current position (M:SS or H:MM:SS)
+    ///   _durationText         — total duration
+    ///   _speedButton          — opens the speed panel
+    ///   _speedText            — shows current speed, e.g. "Speed (1x)"
+    ///   _speedPanel           — overlay containing speed toggles
+    ///   _speedPanelCloseButton— closes the speed panel
+    ///   _speed1Toggle         — 1× speed (put all three toggles in a ToggleGroup)
+    ///   _speed125Toggle       — 1.25× speed
+    ///   _speed15Toggle        — 1.5× speed
+    /// </summary>
+    public class PlayVideoPage : MonoBehaviour, IPageHandler
+    {
+        [Header("AVPro")]
+        [SerializeField] private MediaPlayer _mediaPlayer;
+        [SerializeField] private GameObject _avProRoot;
+
+        [Header("Navigation")]
+        [SerializeField] private GameObject _tabBarRoot;
+        [SerializeField] private Button _homeButton;
+
+        [Header("Playback Controls")]
+        [SerializeField] private Button _playPauseButton;
+        [SerializeField] private Image _playPauseIcon;
+        [SerializeField] private Sprite _playSprite;
+        [SerializeField] private Sprite _pauseSprite;
+        [SerializeField] private Button _skipForwardButton;
+        [SerializeField] private Button _skipBackwardButton;
+        [SerializeField] private Button _nextButton;
+        [SerializeField] private Button _prevButton;
+
+        [Header("Progress")]
+        [SerializeField] private Slider _progressSlider;
+        [SerializeField] private TextMeshProUGUI _currentTimeText;
+        [SerializeField] private TextMeshProUGUI _durationText;
+
+        [Header("Speed")]
+        [SerializeField] private Button _speedButton;
+        [SerializeField] private TextMeshProUGUI _speedText;
+        [SerializeField] private GameObject _speedPanel;
+        [SerializeField] private Button _speedPanelCloseButton;
+        [SerializeField] private Toggle _speed1Toggle;
+        [SerializeField] private Toggle _speed125Toggle;
+        [SerializeField] private Toggle _speed15Toggle;
+
+        // ── Runtime ───────────────────────────────────────────────────
+
+        private string _projectId;
+        private PlaylistItem _currentItem;
+        private CancellationTokenSource _cts;
+        private readonly StreamExpiryChecker _expiryChecker = new();
+
+        private float _playbackRate = 1f;
+        private int _pendingResumeMs;
+        private bool _preventSliderCallback;
+
+        private float _watchSyncTimer;
+        private string _knownServerUpdatedAt;
+
+        private const double SkipSeconds = 10.0;
+        private const float WatchSyncIntervalSecs = 10f;
+
+        // ── Unity lifecycle ───────────────────────────────────────────
+
+        private void Awake()
+        {
+            _homeButton?.onClick.AddListener(OnHomeClicked);
+            _playPauseButton?.onClick.AddListener(OnPlayPauseClicked);
+            _skipForwardButton?.onClick.AddListener(OnSkipForward);
+            _skipBackwardButton?.onClick.AddListener(OnSkipBackward);
+            _nextButton?.onClick.AddListener(OnNextClicked);
+            _prevButton?.onClick.AddListener(OnPrevClicked);
+
+            _progressSlider?.onValueChanged.AddListener(OnSliderChanged);
+
+            _speedButton?.onClick.AddListener(() =>
+                _speedPanel?.SetActive(!(_speedPanel?.activeSelf ?? false)));
+            _speedPanelCloseButton?.onClick.AddListener(() =>
+                _speedPanel?.SetActive(false));
+
+            _speed1Toggle?.onValueChanged.AddListener(on   => { if (on) SetSpeed(1f); });
+            _speed125Toggle?.onValueChanged.AddListener(on => { if (on) SetSpeed(1.25f); });
+            _speed15Toggle?.onValueChanged.AddListener(on  => { if (on) SetSpeed(1.5f); });
+
+            if (_mediaPlayer != null)
+                _mediaPlayer.Events.AddListener(OnMediaPlayerEvent);
+        }
+
+        private void OnDestroy()
+        {
+            if (_mediaPlayer != null)
+                _mediaPlayer.Events.RemoveListener(OnMediaPlayerEvent);
+        }
+
+        private void Update()
+        {
+            if (_mediaPlayer?.Control == null || !_mediaPlayer.MediaOpened) return;
+
+            double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
+            double current  = _mediaPlayer.Control.GetCurrentTime();
+
+            // Scrub bar — guard against re-entrant callbacks
+            if (duration > 0 && !_preventSliderCallback)
+            {
+                _preventSliderCallback = true;
+                _progressSlider?.SetValueWithoutNotify((float)(current / duration));
+                _preventSliderCallback = false;
+            }
+
+            UpdateTimeText(current, duration);
+            AppPlaybackState.Instance.CurrentPositionMs = (long)(current * 1000.0);
+            RefreshPlayPauseButton();
+
+            // Periodic watch-history sync while playing
+            if (_mediaPlayer.Control.IsPlaying() && !DevFlags.UseFakeData)
+            {
+                _watchSyncTimer += Time.deltaTime;
+                if (_watchSyncTimer >= WatchSyncIntervalSecs)
+                {
+                    _watchSyncTimer = 0f;
+                    SyncWatchProgressAsync(CancellationToken.None).Forget();
+                }
+            }
+        }
+
+        // ── IPageHandler ──────────────────────────────────────────────
+
+        public void OnEnter(object param)
+        {
+            if (param is ValueTuple<string, PlaylistItem> t)
+            {
+                _projectId  = t.Item1;
+                _currentItem = t.Item2;
+            }
+
+            if (_avProRoot != null) _avProRoot.SetActive(true);
+            if (_tabBarRoot != null) _tabBarRoot.SetActive(false);
+            _speedPanel?.SetActive(false);
+
+            _watchSyncTimer      = 0f;
+            _knownServerUpdatedAt = _currentItem?.ServerUpdatedAt;
+
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+
+            SetSpeed(1f);
+            RefreshNavButtons();
+            UpdateTimeText(0, 0);
+            if (_mediaPlayer != null) _mediaPlayer.Loop = false;
+
+            LoadAndPlayAsync(_projectId, _currentItem, _cts.Token).Forget();
+        }
+
+        public void OnExit()
+        {
+            _expiryChecker.Stop();
+            _cts?.Cancel();
+
+            // Save final progress with a fresh token — page is closing but the request
+            // must be allowed to complete.
+            if (!DevFlags.UseFakeData && _currentItem != null)
+                SyncWatchProgressAsync(CancellationToken.None).Forget();
+
+            AppState.Instance.MarkWatchHistoryDirty();
+
+            _mediaPlayer?.Control?.Pause();
+            _mediaPlayer?.CloseMedia();
+
+            if (_avProRoot != null) _avProRoot.SetActive(false);
+            if (_tabBarRoot != null) _tabBarRoot.SetActive(true);
+        }
+
+        // ── Load & play ───────────────────────────────────────────────
+
+        private async UniTaskVoid LoadAndPlayAsync(
+            string projectId, PlaylistItem item, CancellationToken ct)
+        {
+            if (string.IsNullOrEmpty(item?.MediaVideoId)) return;
+
+            // 1. Prefer locally downloaded file
+            var localPath = DownloadedVideoState.Instance
+                .GetFilePath(projectId, item.MediaVideoId);
+
+            if (localPath != null)
+            {
+                OpenMedia(localPath, item.ProgressMs);
+                return;
+            }
+
+            // 2. Dev mode — no API available
+            if (DevFlags.UseFakeData)
+            {
+                Debug.LogWarning(
+                    "[PlayVideoPage] No local download found; skipping stream fetch in dev mode.");
+                return;
+            }
+
+            // 3. Fetch stream URL from API
+            try
+            {
+                var stream = await ServiceLocator.Instance.StreamService
+                    .GetStreamAsync(projectId, item.MediaVideoId, ct);
+                if (ct.IsCancellationRequested) return;
+
+                AppPlaybackState.Instance.SetPlayback(projectId, item, stream);
+                OpenMedia(stream.StreamUrl, item.ProgressMs);
+
+                // Schedule a URL refresh 60 s before the token expires
+                _expiryChecker.Stop();
+                _expiryChecker.Start(stream.ExpiresAt, async () =>
+                {
+                    await RefreshStreamUrlAsync(ct);
+                });
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception e)
+            {
+                Debug.LogError($"[PlayVideoPage] Stream fetch failed: {e.Message}");
+            }
+        }
+
+        /// <summary>Opens media at the given path and stores the resume position.</summary>
+        private void OpenMedia(string path, int resumeMs)
+        {
+            _pendingResumeMs = resumeMs;
+            _mediaPlayer.OpenMedia(MediaPathType.AbsolutePathOrURL, path, autoPlay: false);
+        }
+
+        private async UniTask RefreshStreamUrlAsync(CancellationToken ct)
+        {
+            if (ct.IsCancellationRequested || _currentItem == null) return;
+
+            try
+            {
+                // Remember current position so we can seek back after re-open
+                double savedPos = _mediaPlayer.Control?.GetCurrentTime() ?? 0;
+
+                var stream = await ServiceLocator.Instance.StreamService
+                    .GetStreamAsync(_projectId, _currentItem.MediaVideoId, ct);
+                if (ct.IsCancellationRequested) return;
+
+                _pendingResumeMs = (int)(savedPos * 1000.0);
+                _mediaPlayer.OpenMedia(
+                    MediaPathType.AbsolutePathOrURL, stream.StreamUrl, autoPlay: false);
+
+                // Reschedule for the new expiry
+                _expiryChecker.Start(stream.ExpiresAt, async () =>
+                {
+                    await RefreshStreamUrlAsync(ct);
+                });
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[PlayVideoPage] Stream refresh failed: {e.Message}");
+            }
+        }
+
+        // ── AVPro events ──────────────────────────────────────────────
+
+        private void OnMediaPlayerEvent(
+            MediaPlayer mp, MediaPlayerEvent.EventType eventType, ErrorCode errorCode)
+        {
+            switch (eventType)
+            {
+                case MediaPlayerEvent.EventType.MetaDataReady:
+                    OnMetaDataReady();
+                    break;
+
+                case MediaPlayerEvent.EventType.FinishedPlaying:
+                    OnVideoFinished();
+                    break;
+            }
+        }
+
+        private void OnMetaDataReady()
+        {
+            // Apply the current playback speed to the freshly opened media
+            _mediaPlayer.PlaybackRate = _playbackRate;
+
+            if (_pendingResumeMs > 0)
+            {
+                double seekSecs = _pendingResumeMs / 1000.0;
+                double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
+                // Skip resume if the saved position is within the last 5% (treat as completed)
+                if (duration > 0 && seekSecs < duration * 0.95)
+                    _mediaPlayer.Control?.Seek(seekSecs);
+                _pendingResumeMs = 0;
+            }
+
+            _mediaPlayer.Control?.Play();
+        }
+
+        private void OnVideoFinished()
+        {
+            if (!DevFlags.UseFakeData)
+                SyncWatchProgressAsync(CancellationToken.None).Forget();
+
+            var state = AppPlaybackState.Instance;
+            if (!state.HasNext) return; // Stay on the last frame; user presses Home
+
+            state.AdvancePlaylist();
+            _currentItem          = state.Playlist[state.PlaylistIndex];
+            _knownServerUpdatedAt = _currentItem.ServerUpdatedAt;
+            RefreshNavButtons();
+
+            if (_cts == null || _cts.IsCancellationRequested)
+                _cts = new CancellationTokenSource();
+
+            LoadAndPlayAsync(_projectId, _currentItem, _cts.Token).Forget();
+        }
+
+        // ── Playback controls ─────────────────────────────────────────
+
+        private void OnHomeClicked() => UIManager.Instance.GoBack();
+
+        private void OnPlayPauseClicked()
+        {
+            if (_mediaPlayer?.Control == null) return;
+            if (_mediaPlayer.Control.IsPlaying())
+                _mediaPlayer.Control.Pause();
+            else
+                _mediaPlayer.Control.Play();
+        }
+
+        private void OnSkipForward()
+        {
+            if (_mediaPlayer?.Control == null) return;
+            double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
+            double target   = Math.Min(_mediaPlayer.Control.GetCurrentTime() + SkipSeconds, duration);
+            _mediaPlayer.Control.Seek(target);
+        }
+
+        private void OnSkipBackward()
+        {
+            if (_mediaPlayer?.Control == null) return;
+            double target = Math.Max(_mediaPlayer.Control.GetCurrentTime() - SkipSeconds, 0.0);
+            _mediaPlayer.Control.Seek(target);
+        }
+
+        private void OnNextClicked()
+        {
+            var state = AppPlaybackState.Instance;
+            if (!state.HasNext) return;
+
+            if (!DevFlags.UseFakeData)
+                SyncWatchProgressAsync(CancellationToken.None).Forget();
+
+            state.AdvancePlaylist();
+            SwitchToPlaylistItem(state.Playlist[state.PlaylistIndex]);
+        }
+
+        private void OnPrevClicked()
+        {
+            var state = AppPlaybackState.Instance;
+            if (!state.HasPrev) return;
+
+            if (!DevFlags.UseFakeData)
+                SyncWatchProgressAsync(CancellationToken.None).Forget();
+
+            state.RewindPlaylist();
+            SwitchToPlaylistItem(state.Playlist[state.PlaylistIndex]);
+        }
+
+        private void SwitchToPlaylistItem(PlaylistItem item)
+        {
+            _expiryChecker.Stop();
+            _currentItem          = item;
+            _knownServerUpdatedAt = item.ServerUpdatedAt;
+            RefreshNavButtons();
+
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+            LoadAndPlayAsync(_projectId, _currentItem, _cts.Token).Forget();
+        }
+
+        private void OnSliderChanged(float value)
+        {
+            if (_preventSliderCallback || _mediaPlayer?.Control == null) return;
+            double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
+            if (duration > 0)
+                _mediaPlayer.Control.Seek(value * duration);
+        }
+
+        // ── Speed ─────────────────────────────────────────────────────
+
+        private void SetSpeed(float rate)
+        {
+            _playbackRate = rate;
+
+            // Apply to player only if media is open; otherwise applied in OnMetaDataReady
+            if (_mediaPlayer != null && _mediaPlayer.MediaOpened)
+                _mediaPlayer.PlaybackRate = rate;
+
+            // Update label  — format: "Speed (1x)", "Speed (1.25x)", "Speed (1.5x)"
+            if (_speedText != null)
+            {
+                string label = Mathf.Approximately(rate, 1f)
+                    ? "1"
+                    : rate.ToString("0.##");
+                _speedText.text = $"Speed ({label}x)";
+            }
+
+            // Sync toggle visuals without re-firing listeners
+            _speed1Toggle?.SetIsOnWithoutNotify(Mathf.Approximately(rate, 1f));
+            _speed125Toggle?.SetIsOnWithoutNotify(Mathf.Approximately(rate, 1.25f));
+            _speed15Toggle?.SetIsOnWithoutNotify(Mathf.Approximately(rate, 1.5f));
+        }
+
+        // ── Watch history ─────────────────────────────────────────────
+
+        private async UniTaskVoid SyncWatchProgressAsync(CancellationToken ct)
+        {
+            if (string.IsNullOrEmpty(_projectId) || _currentItem == null) return;
+
+            var request = new WatchProgressRequest
+            {
+                ProgressMs           = (int)AppPlaybackState.Instance.CurrentPositionMs,
+                ProjectId            = _projectId,
+                DeviceType           = DeviceTypeHelper.Get(),
+                KnownServerUpdatedAt = _knownServerUpdatedAt,
+            };
+
+            try
+            {
+                var (response, _) = await ServiceLocator.Instance.WatchHistoryService
+                    .UpdateProgressAsync(_currentItem.MediaVideoId, request, ct);
+                if (response != null)
+                    _knownServerUpdatedAt = response.ServerUpdatedAt;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[PlayVideoPage] Watch progress sync failed: {e.Message}");
+            }
+        }
+
+        // ── UI helpers ────────────────────────────────────────────────
+
+        private void RefreshPlayPauseButton()
+        {
+            if (_playPauseIcon == null) return;
+            bool playing = _mediaPlayer?.Control?.IsPlaying() ?? false;
+            var target = playing ? _pauseSprite : _playSprite;
+            if (target != null) _playPauseIcon.sprite = target;
+        }
+
+        private void RefreshNavButtons()
+        {
+            var state = AppPlaybackState.Instance;
+            if (_nextButton != null) _nextButton.interactable = state.HasNext;
+            if (_prevButton != null) _prevButton.interactable = state.HasPrev;
+        }
+
+        private void UpdateTimeText(double current, double duration)
+        {
+            if (_currentTimeText != null) _currentTimeText.text = FormatTime(current);
+            if (_durationText != null)    _durationText.text    = FormatTime(duration);
+        }
+
+        private static string FormatTime(double totalSeconds)
+        {
+            if (totalSeconds < 0) totalSeconds = 0;
+            var t = TimeSpan.FromSeconds(totalSeconds);
+            return t.TotalHours >= 1
+                ? $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}"
+                : $"{t.Minutes}:{t.Seconds:D2}";
+        }
+    }
+}

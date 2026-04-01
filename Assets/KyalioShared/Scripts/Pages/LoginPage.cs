@@ -103,8 +103,24 @@ namespace Kyalio.Pages
                     continue;
                 }
 
-                if (poll.Status == "verified")
+                Debug.Log($"[LoginPage] Poll status: '{poll?.Status ?? "(null response)"}'");
+
+                if (poll == null)
                 {
+                    Debug.LogWarning("[LoginPage] Poll returned a null response body.");
+                    continue;
+                }
+
+                if (string.Equals(poll.Status, "verified", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (poll.Credential == null)
+                    {
+                        // Treat a verified-but-no-credential response as a fatal pairing
+                        // failure — stop polling and show an error rather than looping.
+                        Debug.LogError("[LoginPage] Verified response is missing credential — aborting.");
+                        SetLoading(false);
+                        return;
+                    }
                     OnPairingVerified(poll.Credential);
                     return;
                 }
@@ -113,22 +129,24 @@ namespace Kyalio.Pages
 
         private void OnPairingVerified(PairPollCredential credential)
         {
+            Debug.Log("[LoginPage] Pairing verified — setting token.");
             ServiceLocator.Instance.ApiClient.SetToken(credential.Token);
             AppState.Instance.SetLoggedIn();
 
             // Load subscriptions before navigating — populates ProjectCacheRepository
             // so every page (Search, Home, Series) has data ready on first enter.
-            LoadSubscriptionsAndProceedAsync(credential).Forget();
+            LoadSubscriptionsAndProceedAsync().Forget();
         }
 
-        private async UniTaskVoid LoadSubscriptionsAndProceedAsync(
-            PairPollCredential credential)
+        private async UniTaskVoid LoadSubscriptionsAndProceedAsync()
         {
             try
             {
+                Debug.Log("[LoginPage] Loading subscriptions...");
                 var subs = await ServiceLocator.Instance.AuthService
-                    .GetSubscriptionsAsync(_cts?.Token ?? default);
+                    .GetSubscriptionsAsync();
                 AppState.Instance.SetSubscriptions(subs?.Items);
+                Debug.Log("[LoginPage] Subscriptions loaded.");
             }
             catch (Exception e)
             {
@@ -136,14 +154,28 @@ namespace Kyalio.Pages
                 Debug.LogWarning($"[LoginPage] Subscriptions load failed: {e.Message}");
             }
 
-            PopupManager.Instance.ShowDone("Paired successfully!", onDone: () =>
-            {
-                if (_tabBarRoot != null)
-                    _tabBarRoot.SetActive(true);
+            Debug.Log("[LoginPage] Showing paired popup.");
 
-                UIManager.Instance.SwitchPage(PageType.Home);
-                TabBar.Instance?.SelectTab(PageType.Home);
-            });
+            if (PopupManager.Instance != null)
+            {
+                PopupManager.Instance.ShowDone("Paired successfully!", onDone: NavigateToHome);
+            }
+            else
+            {
+                // PopupManager not available — navigate directly.
+                Debug.LogWarning("[LoginPage] PopupManager not found; navigating directly.");
+                NavigateToHome();
+            }
+        }
+
+        private void NavigateToHome()
+        {
+            Debug.Log("[LoginPage] Navigating to Home.");
+            if (_tabBarRoot != null)
+                _tabBarRoot.SetActive(true);
+
+            UIManager.Instance.SwitchPage(PageType.Home);
+            TabBar.Instance?.SelectTab(PageType.Home);
         }
 
         // ── UI helpers ────────────────────────────────────────────────

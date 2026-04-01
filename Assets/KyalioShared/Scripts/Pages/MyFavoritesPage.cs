@@ -114,11 +114,9 @@ namespace Kyalio.Pages
 
         private async UniTaskVoid LoadWithOverlayAsync(CancellationToken ct)
         {
-            LoadingOverlay.Instance.Show();
             try   { await LoadListAsync(ct); }
             catch (OperationCanceledException) { }
             catch (Exception e) { Debug.LogError($"[MyFavoritesPage] Load failed: {e.Message}"); }
-            finally { LoadingOverlay.Instance.Hide(); }
         }
 
         private async UniTask LoadListAsync(CancellationToken ct)
@@ -304,7 +302,6 @@ namespace Kyalio.Pages
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
 
-            LoadingOverlay.Instance.Show();
             try
             {
                 if (_mode == ListMode.Favorites)
@@ -328,10 +325,6 @@ namespace Kyalio.Pages
             catch (Exception e)
             {
                 Debug.LogError($"[MyFavoritesPage] Delete failed: {e.Message}");
-            }
-            finally
-            {
-                LoadingOverlay.Instance.Hide();
             }
         }
     }

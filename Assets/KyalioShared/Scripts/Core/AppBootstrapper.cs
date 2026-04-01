@@ -1,4 +1,5 @@
 using Kyalio.Dev;
+using Kyalio.Services;
 using UnityEngine;
 
 namespace Kyalio.Core
@@ -35,6 +36,7 @@ namespace Kyalio.Core
         private void Awake()
         {
             ServiceLocator.Instance.Initialize(_apiBaseUrl, string.Empty, _questAppApiKey);
+            DownloadManager.Instance?.Initialize(_apiBaseUrl);
             DevFlags.UseFakeData = _useFakeData;
         }
 
