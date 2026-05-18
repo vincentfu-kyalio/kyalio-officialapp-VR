@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kyalio.Models;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -15,17 +16,29 @@ namespace Kyalio.Services
     /// </summary>
     public class ApiClient
     {
+        public const string AppVersionHeader = "X-App-Version";
+
+        /// <summary>
+        /// Fires when any endpoint returns 426 APP_VERSION_UNSUPPORTED. Subscribers should
+        /// surface the forced-update UI and stop normal API flow. The originating call still
+        /// throws <see cref="ApiException"/>; this is a side-channel notification.
+        /// </summary>
+        public static event Action<ForceUpdateInfo> OnForceUpdateRequired;
+
         private readonly string _baseUrl;
+        private readonly string _appVersion;
         private string _token;
 
-        public ApiClient(string baseUrl)
+        public ApiClient(string baseUrl, string appVersion = null)
         {
             _baseUrl = baseUrl.TrimEnd('/');
+            _appVersion = appVersion;
         }
 
         public void SetToken(string token) => _token = token;
         public void ClearToken() => _token = null;
         public string Token => _token;
+        public string AppVersion => _appVersion;
 
         public UniTask<T> GetAsync<T>(string path, CancellationToken ct = default)
             => SendAsync<T>(UnityWebRequest.kHttpVerbGET, path, null, null, ct);
@@ -84,6 +97,8 @@ namespace Kyalio.Services
             req.SetRequestHeader("Cache-Control", "no-cache");
             if (!string.IsNullOrEmpty(_token))
                 req.SetRequestHeader("Authorization", $"Bearer {_token}");
+            if (!string.IsNullOrEmpty(_appVersion))
+                req.SetRequestHeader(AppVersionHeader, _appVersion);
             if (extraHeaders != null)
                 foreach (var kv in extraHeaders)
                     req.SetRequestHeader(kv.Key, kv.Value);
@@ -109,6 +124,7 @@ namespace Kyalio.Services
                     Debug.LogError($"[ApiClient] SSE {url} \u2192 {code}\n{body}");
                 else
                     Debug.LogWarning($"[ApiClient] SSE {url} \u2192 {code}\n{body}");
+                HandleForceUpdate(code, body);
                 throw new ApiException(code, body);
             }
 
@@ -138,6 +154,9 @@ namespace Kyalio.Services
             if (!string.IsNullOrEmpty(_token))
                 req.SetRequestHeader("Authorization", $"Bearer {_token}");
 
+            if (!string.IsNullOrEmpty(_appVersion))
+                req.SetRequestHeader(AppVersionHeader, _appVersion);
+
             if (extraHeaders != null)
                 foreach (var kv in extraHeaders)
                     req.SetRequestHeader(kv.Key, kv.Value);
@@ -165,6 +184,7 @@ namespace Kyalio.Services
                     Debug.LogError($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
                 else
                     Debug.LogWarning($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
+                HandleForceUpdate(code, body);
                 throw new ApiException(code, body);
             }
 
@@ -201,6 +221,9 @@ namespace Kyalio.Services
             if (!string.IsNullOrEmpty(_token))
                 req.SetRequestHeader("Authorization", $"Bearer {_token}");
 
+            if (!string.IsNullOrEmpty(_appVersion))
+                req.SetRequestHeader(AppVersionHeader, _appVersion);
+
             if (extraHeaders != null)
                 foreach (var kv in extraHeaders)
                     req.SetRequestHeader(kv.Key, kv.Value);
@@ -227,10 +250,28 @@ namespace Kyalio.Services
                     Debug.LogError($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
                 else
                     Debug.LogWarning($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
+                HandleForceUpdate(code, body);
                 throw new ApiException(code, body);
             }
 
             Debug.Log($"[ApiClient] {method} {url} \u2192 {req.responseCode}");
+        }
+
+        private static void HandleForceUpdate(int statusCode, string body)
+        {
+            if (statusCode != 426) return;
+            if (OnForceUpdateRequired == null) return;
+
+            ForceUpdateInfo info = null;
+            try
+            {
+                info = JsonConvert.DeserializeObject<ForceUpdateInfo>(body);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[ApiClient] 426 body parse failed: {e.Message}\n{body}");
+            }
+            OnForceUpdateRequired.Invoke(info);
         }
     }
 

@@ -3,9 +3,10 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
-using Kyalio.Models;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using Kyalio.Services;
-using Kyalio.State;
+using Kyalio.State.V2;
 using TMPro;
 using UnityEngine;
 
@@ -17,17 +18,16 @@ namespace Kyalio.Pages
     /// Flow:
     ///   1. OnEnter → POST /api/pair/request → display 6-digit code across the six digit labels.
     ///   2. Open SSE connection to GET /api/pair/stream/{code} and wait for a terminal event.
-    ///   3. On "verified" → store Bearer token in ApiClient, show "Paired successfully!" popup.
+    ///   3. On "verified" → store accessToken in ApiClient, then run the V2 sync triad:
+    ///        - GET  /api/me/sync               (granted-project versions)
+    ///        - POST /api/projects/batch        (missing + outdated)
+    ///        - GET  /api/me/home               (home layout + filters)
+    ///        - GET  /api/me/progress           (full progress snapshot)
     ///   4. Popup Done → activate TabBar, navigate to Home.
     ///   5. On "expired" or 404 → automatically request a new code.
     ///
-    /// API config (base URL + Quest key) is set once on AppBootstrapper and stored in
-    /// ServiceLocator — this page reads QuestPairingService directly from there.
-    ///
-    /// Inspector:
-    ///   _codeDigits      — exactly 6 TextMeshProUGUI components, one per digit (left to right)
-    ///   _loadingIndicator — (optional) shown while the pair/request is in flight
-    ///   _tabBarRoot      — root GameObject of the TabBar; hidden until login succeeds
+    /// API config (base URL + Quest key + app version) is set once on AppBootstrapper
+    /// and stored in ServiceLocator — this page reads V2 services directly from there.
     /// </summary>
     public class LoginPage : MonoBehaviour, IPageHandler
     {
@@ -60,7 +60,7 @@ namespace Kyalio.Pages
         {
             try
             {
-                var response = await ServiceLocator.Instance.QuestPairingService
+                var response = await ServiceLocator.Instance.V2.Auth
                     .RequestPairAsync(ct);
 
                 DisplayCode(response.Code);
@@ -77,11 +77,11 @@ namespace Kyalio.Pages
 
         private async UniTask StreamUntilVerifiedAsync(string code, CancellationToken ct)
         {
-            PairPollResponse result;
+            PairStreamPayload result;
             try
             {
-                result = await ServiceLocator.Instance.QuestPairingService
-                    .StreamAsync(code, ct);
+                result = await ServiceLocator.Instance.V2.Auth
+                    .StreamPairAsync(code, ct);
             }
             catch (ApiException ex) when (ex.StatusCode == 404)
             {
@@ -102,9 +102,9 @@ namespace Kyalio.Pages
 
             if (string.Equals(result?.Status, "verified", StringComparison.OrdinalIgnoreCase))
             {
-                if (result.Credential == null)
+                if (result.Credential == null || string.IsNullOrEmpty(result.Credential.AccessToken))
                 {
-                    Debug.LogError("[LoginPage] Verified response is missing credential — aborting.");
+                    Debug.LogError("[LoginPage] Verified response is missing accessToken — aborting.");
                     SetLoading(false);
                     return;
                 }
@@ -121,33 +121,68 @@ namespace Kyalio.Pages
             }
         }
 
-        private void OnPairingVerified(PairPollCredential credential)
+        private void OnPairingVerified(Credential credential)
         {
             Debug.Log("[LoginPage] Pairing verified — setting token.");
-            ServiceLocator.Instance.ApiClient.SetToken(credential.Token);
+            ServiceLocator.Instance.ApiClient.SetToken(credential.AccessToken);
             AppState.Instance.SetLoggedIn();
-
-            // Load subscriptions before navigating — populates ProjectCacheRepository
-            // so every page (Search, Home, Series) has data ready on first enter.
-            LoadSubscriptionsAndProceedAsync().Forget();
+            BootstrapSessionAndProceedAsync(_cts.Token).Forget();
         }
 
-        private async UniTaskVoid LoadSubscriptionsAndProceedAsync()
+        // ── Sync triad: sync → batch → home → progress ────────────────
+
+        private async UniTaskVoid BootstrapSessionAndProceedAsync(CancellationToken ct)
         {
+            SetLoading(true);
+
             try
             {
-                Debug.Log("[LoginPage] Loading subscriptions...");
-                var subs = await ServiceLocator.Instance.AuthService
-                    .GetSubscriptionsAsync();
-                AppState.Instance.SetSubscriptions(subs?.Items);
-                Debug.Log("[LoginPage] Subscriptions loaded.");
+                var v2 = ServiceLocator.Instance.V2;
+                var repo = ProjectCacheRepository.Instance;
+
+                // 1. /me/sync — authoritative granted set.
+                Debug.Log("[LoginPage] /api/me/sync …");
+                var sync = await v2.Sync.SyncAsync(ct);
+                if (ct.IsCancellationRequested) return;
+                var diff = repo.ApplySync(sync);
+
+                // 2. /projects/batch for missing + version-outdated projects.
+                if (diff.Missing.Count + diff.OutdatedProject.Count > 0)
+                {
+                    Debug.Log($"[LoginPage] /api/projects/batch ({diff.Missing.Count} missing + " +
+                              $"{diff.OutdatedProject.Count} outdated)");
+                    var batch = await v2.Content.BatchAsync(diff.ToBatch, ct);
+                    if (ct.IsCancellationRequested) return;
+                    repo.ApplyBatch(batch);
+                }
+
+                // 3. /me/home — layout + normalized specialty / program catalog.
+                Debug.Log("[LoginPage] /api/me/home …");
+                var home = await v2.Home.GetHomeAsync(ct);
+                if (ct.IsCancellationRequested) return;
+                AppState.Instance.SetHome(home);
+
+                // 4. /me/progress — full snapshot on cold start.
+                Debug.Log("[LoginPage] /api/me/progress …");
+                var progress = await v2.Sync.GetProgressAsync(since: null, ct: ct);
+                if (ct.IsCancellationRequested) return;
+                repo.ApplyProgress(progress, merge: false);
+
+                Debug.Log($"[LoginPage] Session bootstrap complete — {repo.All.Count} projects cached, " +
+                          $"{repo.Specialties.Count} specialties, {repo.Programs.Count} programs.");
             }
+            catch (OperationCanceledException) { return; }
             catch (Exception e)
             {
-                // Non-fatal: proceed even if subscriptions fail to load.
-                Debug.LogWarning($"[LoginPage] Subscriptions load failed: {e.Message}");
+                Debug.LogWarning($"[LoginPage] Session bootstrap failed: {e.Message}");
+                // Non-fatal: proceed even if any of the sync calls fails.
             }
 
+            ShowPairedPopupAndProceed();
+        }
+
+        private void ShowPairedPopupAndProceed()
+        {
             Debug.Log("[LoginPage] Showing paired popup.");
 
             if (PopupManager.Instance != null)
@@ -156,7 +191,6 @@ namespace Kyalio.Pages
             }
             else
             {
-                // PopupManager not available — navigate directly.
                 Debug.LogWarning("[LoginPage] PopupManager not found; navigating directly.");
                 NavigateToHome();
             }
