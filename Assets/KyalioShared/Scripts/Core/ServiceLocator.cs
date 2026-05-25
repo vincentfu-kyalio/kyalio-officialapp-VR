@@ -7,10 +7,7 @@ namespace Kyalio.Core
     /// Lightweight Service Locator that centralises all service instances.
     /// Initialised by AppManager; Pages and Components access services through this.
     ///
-    /// During the V1 → V2 migration both layers are exposed:
-    ///   - V1 properties (AuthService, ProjectService, …) drive existing UI.
-    ///   - V2 properties (under <see cref="V2"/>) drive the new sync / home / batch flow.
-    /// Once UI fully migrates the V1 properties will be removed.
+    /// All services follow the V2 (delta-sync) contract and are exposed under <see cref="V2"/>.
     /// </summary>
     public class ServiceLocator
     {
@@ -20,16 +17,7 @@ namespace Kyalio.Core
         public string ApiBaseUrl { get; private set; }
         public ApiClient ApiClient { get; private set; }
 
-        // ── V1 (legacy) ──────────────────────────────────────────────
-        public AuthService AuthService { get; private set; }
-        public QuestPairingService QuestPairingService { get; private set; }
-        public ProjectService ProjectService { get; private set; }
-        public FavoriteService FavoriteService { get; private set; }
-        public WatchHistoryService WatchHistoryService { get; private set; }
-        public AnalyticsService AnalyticsService { get; private set; }
-        public StreamService StreamService { get; private set; }
-
-        // ── V2 (new contract) ────────────────────────────────────────
+        // ── Services (new contract) ──────────────────────────────────
         public V2Services V2 { get; private set; }
 
         public class V2Services
@@ -47,8 +35,8 @@ namespace Kyalio.Core
 
         /// <summary>
         /// Initialise all services.
-        /// appKey     — X-App-Key for mobile AuthService (pass empty string on Quest).
-        /// questKey   — X-Quest-Key for QuestPairingService (pass empty string on Mobile).
+        /// appKey     — X-App-Key for the mobile auth surface (pass empty string on Quest).
+        /// questKey   — X-Quest-Key for the Quest pairing surface (pass empty string on Mobile).
         /// appVersion — X-App-Version sent on every non-admin endpoint except logout.
         ///              Must be major.minor.patch; defaults to Application.version.
         /// </summary>
@@ -57,16 +45,6 @@ namespace Kyalio.Core
             ApiBaseUrl = apiBaseUrl.TrimEnd('/');
             ApiClient = new ApiClient(apiBaseUrl, appVersion ?? UnityEngine.Application.version);
 
-            // V1 (legacy) — still backing existing pages until UI migrates.
-            AuthService = new AuthService(ApiClient, appKey);
-            QuestPairingService = new QuestPairingService(ApiClient, questKey);
-            ProjectService = new ProjectService(ApiClient);
-            FavoriteService = new FavoriteService(ApiClient);
-            WatchHistoryService = new WatchHistoryService(ApiClient);
-            AnalyticsService = new AnalyticsService(ApiClient);
-            StreamService = new StreamService(ApiClient);
-
-            // V2 (new contract).
             V2 = new V2Services
             {
                 Auth         = new V2.AuthService(ApiClient, appKey, questKey),
