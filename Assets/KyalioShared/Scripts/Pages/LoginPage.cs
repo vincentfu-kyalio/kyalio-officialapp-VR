@@ -44,6 +44,10 @@ namespace Kyalio.Pages
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
 
+            // Pairing screen must stand alone — hide the tab bar (fresh boot or after logout).
+            if (_tabBarRoot != null)
+                _tabBarRoot.SetActive(false);
+
             ClearDigits();
             SetLoading(true);
             StartPairingAsync(_cts.Token).Forget();
