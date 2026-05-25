@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Core;
+using Kyalio.Services;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -76,9 +77,13 @@ namespace Kyalio.Utils
             try
             {
                 using var req = UnityWebRequestTexture.GetTexture(url);
-                var token = ServiceLocator.Instance.ApiClient.Token;
-                if (!string.IsNullOrEmpty(token))
-                    req.SetRequestHeader("Authorization", $"Bearer {token}");
+                var client = ServiceLocator.Instance.ApiClient;
+                if (!string.IsNullOrEmpty(client.Token))
+                    req.SetRequestHeader("Authorization", $"Bearer {client.Token}");
+                // Auth-gated proxy thumbnails (/api/.../thumbnail) require X-App-Version too;
+                // its absence returns 400 APP_VERSION_MISSING. Harmless on signed Mux URLs.
+                if (!string.IsNullOrEmpty(client.AppVersion))
+                    req.SetRequestHeader(ApiClient.AppVersionHeader, client.AppVersion);
                 await req.SendWebRequest().ToUniTask(cancellationToken: ct);
 
                 if (req.result != UnityWebRequest.Result.Success)
