@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -29,7 +29,7 @@ namespace Kyalio.Components
                 seeAllButton.onClick.AddListener(() => OnSeeAllClicked?.Invoke());
         }
 
-        public void Bind(string title, IReadOnlyList<WatchHistoryProjectItem> items)
+        public void Bind(string title, IReadOnlyList<WatchHistoryItem> items)
         {
             titleText.text = title;
             ReturnAll();

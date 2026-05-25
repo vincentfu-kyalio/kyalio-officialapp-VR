@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace Kyalio.Components
 {
     /// <summary>
-    /// SeriesPage left sidebar: one Button per role, built dynamically from API data.
+    /// SeriesPage left sidebar: one Button per home-roles role.
     /// Uses the same "SelectedIndicator" child-GameObject convention as HomeMenuPanel.
     /// Inspector: menuItemPrefab, container
     /// </summary>
@@ -16,15 +16,15 @@ namespace Kyalio.Components
         [SerializeField] private Button menuItemPrefab;
         [SerializeField] private Transform container;
 
-        public event System.Action<RoleContentItem> OnRoleSelected;
+        public event System.Action<HomeRoleItem> OnRoleSelected;
 
-        private readonly List<(Button button, RoleContentItem role)> _items = new();
+        private readonly List<(Button button, HomeRoleItem role)> _items = new();
         private Button _selectedButton;
 
         // ── Public API ────────────────────────────────────────────────
 
         /// <summary>Clears and rebuilds the role list.</summary>
-        public void Build(List<RoleContentItem> roles)
+        public void Build(List<HomeRoleItem> roles)
         {
             foreach (var (btn, _) in _items)
                 if (btn != null) Destroy(btn.gameObject);
@@ -47,7 +47,7 @@ namespace Kyalio.Components
 
         // ── Private ───────────────────────────────────────────────────
 
-        private void CreateItem(RoleContentItem role)
+        private void CreateItem(HomeRoleItem role)
         {
             var button = Instantiate(menuItemPrefab, container);
 
@@ -60,7 +60,7 @@ namespace Kyalio.Components
             _items.Add((button, role));
         }
 
-        private void SelectItem(Button button, RoleContentItem role)
+        private void SelectItem(Button button, HomeRoleItem role)
         {
             if (_selectedButton != null)
                 SetSelectedVisual(_selectedButton, false);

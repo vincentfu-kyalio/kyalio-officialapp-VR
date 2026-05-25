@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -34,7 +34,7 @@ namespace Kyalio.Components
         /// Rebuilds the chip list from allItems filtered by selectedIds.
         /// Hides the parent GameObject when selectedIds is empty.
         /// </summary>
-        public void Bind(List<Category> allItems, HashSet<string> selectedIds)
+        public void Bind(List<IdNameRef> allItems, HashSet<string> selectedIds)
         {
             foreach (var chip in _chips)
                 Destroy(chip.gameObject);

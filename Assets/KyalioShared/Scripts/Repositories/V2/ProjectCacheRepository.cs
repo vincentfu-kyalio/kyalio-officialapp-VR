@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Kyalio.Models.V2;
+using FilterOptions = Kyalio.Models.FilterOptions;
 
 namespace Kyalio.Repositories.V2
 {
@@ -133,6 +134,62 @@ namespace Kyalio.Repositories.V2
         {
             if (string.IsNullOrEmpty(programId)) return null;
             return Programs.FirstOrDefault(p => p.Id == programId);
+        }
+
+        /// <summary>First program of a project (for its logo / name), or null.</summary>
+        public ProgramSummary GetFirstProgram(Project p)
+        {
+            var id = p?.PrimaryProgramId;
+            return string.IsNullOrEmpty(id) ? null : GetProgram(id);
+        }
+
+        /// <summary>Hydrates a list of projectIds against the cache, skipping unknown ids.</summary>
+        public List<Project> Hydrate(IEnumerable<string> projectIds)
+        {
+            var result = new List<Project>();
+            if (projectIds == null) return result;
+            foreach (var id in projectIds)
+            {
+                var p = Get(id);
+                if (p != null) result.Add(p);
+            }
+            return result;
+        }
+
+        /// <summary>Looks up a single video inside a cached project's playlist.</summary>
+        public PlaylistItem GetVideo(string projectId, string videoId)
+        {
+            var p = Get(projectId);
+            if (p?.Playlist == null || string.IsNullOrEmpty(videoId)) return null;
+            return p.Playlist.FirstOrDefault(v => v.VideoId == videoId);
+        }
+
+        /// <summary>Index of a video within its project playlist, or -1.</summary>
+        public int GetVideoIndex(string projectId, string videoId)
+        {
+            var p = Get(projectId);
+            if (p?.Playlist == null || string.IsNullOrEmpty(videoId)) return -1;
+            return p.Playlist.FindIndex(v => v.VideoId == videoId);
+        }
+
+        /// <summary>
+        /// Client-side filter over the granted-project cache. The server search endpoint is
+        /// the authoritative path; this is the offline fallback and the no-keyword default.
+        /// </summary>
+        public List<Project> Filter(FilterOptions options)
+        {
+            var all = _projects.Values;
+            if (options == null || options.IsEmpty) return all.ToList();
+
+            return all.Where(p =>
+            {
+                if (options.SpecialtyIds.Count > 0 && !options.SpecialtyIds.Contains(p.SpecialtyId))
+                    return false;
+                if (options.ProgramIds.Count > 0 &&
+                    (p.ProgramIds == null || !p.ProgramIds.Any(options.ProgramIds.Contains)))
+                    return false;
+                return true;
+            }).ToList();
         }
 
         public int GetProgressMs(string videoId)

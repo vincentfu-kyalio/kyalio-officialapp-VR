@@ -119,7 +119,7 @@ namespace Kyalio.Components
 
         private async UniTaskVoid LoadImageAsync(string url, Image target, CancellationToken ct)
         {
-            var sprite = await ThumbnailLoader.LoadAsync(url, ct);
+            var sprite = await ThumbnailLoader.LoadAsync(ThumbnailLoader.Resolve(url), ct);
             if (sprite != null && !ct.IsCancellationRequested)
             {
                 target.sprite = sprite;

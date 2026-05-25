@@ -64,12 +64,6 @@ namespace Kyalio.Services
         // ── Public API ────────────────────────────────────────────────
         public void Enqueue(string projectId, string videoId, long totalBytes)
         {
-            if (string.IsNullOrEmpty(_baseUrl))
-            {
-                Debug.LogError("[DownloadManager] _baseUrl is empty — Initialize() not called. " +
-                               "Check AppManager calls downloadManager.Initialize(apiBaseUrl).");
-                return;
-            }
             if (IsActive(projectId, videoId))
             {
                 Debug.Log($"[DownloadManager] Already active: {projectId}/{videoId}");
@@ -106,6 +100,19 @@ namespace Kyalio.Services
                 OnQueueChanged?.Invoke();
                 OnCancelled?.Invoke(projectId, videoId);
             }
+        }
+
+        /// <summary>
+        /// Removes a completed/partial download: cancels it if active, deletes the local
+        /// file and record, and notifies the server (DELETE /download, idempotent).
+        /// </summary>
+        public void Delete(string projectId, string videoId)
+        {
+            if (IsActive(projectId, videoId))
+                Cancel(projectId, videoId);
+
+            DownloadedVideoState.Instance.RemoveRecord(projectId, videoId);
+            ServiceLocator.Instance?.V2?.Download?.DeleteAsync(projectId, videoId).Forget();
         }
 
         public bool IsDownloading(string projectId, string videoId) =>
@@ -148,15 +155,31 @@ namespace Kyalio.Services
             long existingBytes = File.Exists(destPath) ? new FileInfo(destPath).Length : 0;
             bool useRange = existingBytes > 0;
 
-            var url = $"{_baseUrl}/api/projects/{task.ProjectId}/videos/{task.VideoId}/download";
+            var download = ServiceLocator.Instance?.V2?.Download;
+            if (download == null)
+            {
+                OnFailed?.Invoke(task.ProjectId, task.VideoId, "Download service unavailable.");
+                _downloadCts?.Dispose();
+                _downloadCts = null;
+                return;
+            }
+
             UnityWebRequest req = null;
+            bool canceled = false;
 
             try
             {
-                req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbGET);
-                var token = ServiceLocator.Instance.ApiClient.Token;
-                if (!string.IsNullOrEmpty(token))
-                    req.SetRequestHeader("Authorization", $"Bearer {token}");
+                // 1. Resolve a fresh presigned R2 URL (2-hour TTL, supports Range for resume).
+                var urlResp = await download.GetDownloadUrlAsync(task.ProjectId, task.VideoId, ct);
+                if (string.IsNullOrEmpty(urlResp?.DownloadUrl))
+                {
+                    OnFailed?.Invoke(task.ProjectId, task.VideoId, "No download URL returned.");
+                    return;
+                }
+
+                // 2. Stream the bytes straight from R2. The URL is self-authenticating —
+                //    do NOT attach the API Bearer or the presigned signature breaks.
+                req = new UnityWebRequest(urlResp.DownloadUrl, UnityWebRequest.kHttpVerbGET);
                 if (useRange)
                     req.SetRequestHeader("Range", $"bytes={existingBytes}-");
                 req.downloadHandler = new DownloadHandlerFile(destPath, useRange);
@@ -180,6 +203,7 @@ namespace Kyalio.Services
                 if (useRange && req.responseCode == 200)
                 {
                     TryDeleteFile(destPath);
+                    NotifyServerCanceled(task);
                     OnFailed?.Invoke(task.ProjectId, task.VideoId, "Server does not support resume. Please try again.");
                     return;
                 }
@@ -187,11 +211,13 @@ namespace Kyalio.Services
                 if (req.result != UnityWebRequest.Result.Success)
                 {
                     Debug.LogError($"[DownloadManager] {task.ProjectId}/{task.VideoId}: {req.error}");
+                    NotifyServerCanceled(task);
                     OnFailed?.Invoke(task.ProjectId, task.VideoId, req.error);
                     return;
                 }
 
-                // Success: write to state and notify listeners
+                // 3. Success: tell the server the file is fully written, persist, notify.
+                NotifyServerComplete(task);
                 DownloadedVideoState.Instance.AddRecord(new DownloadRecord
                 {
                     ProjectId = task.ProjectId,
@@ -205,13 +231,16 @@ namespace Kyalio.Services
             }
             catch (OperationCanceledException)
             {
+                canceled = true;
                 req?.Abort();
                 // Partial file is retained for Range-based resumption next time
+                NotifyServerCanceled(task);
                 OnCancelled?.Invoke(task.ProjectId, task.VideoId);
             }
             catch (Exception e)
             {
                 Debug.LogError($"[DownloadManager] Exception: {e.Message}");
+                if (!canceled) NotifyServerCanceled(task);
                 OnFailed?.Invoke(task.ProjectId, task.VideoId, e.Message);
             }
             finally
@@ -221,6 +250,14 @@ namespace Kyalio.Services
                 _downloadCts = null;
             }
         }
+
+        private static void NotifyServerComplete(DownloadTask task) =>
+            ServiceLocator.Instance?.V2?.Download
+                ?.MarkCompleteAsync(task.ProjectId, task.VideoId).Forget();
+
+        private static void NotifyServerCanceled(DownloadTask task) =>
+            ServiceLocator.Instance?.V2?.Download
+                ?.MarkCanceledAsync(task.ProjectId, task.VideoId).Forget();
 
         // ── Helpers ───────────────────────────────────────────────────
         public static string GetDownloadPath(string projectId, string videoId) =>

@@ -66,6 +66,14 @@ namespace Kyalio.Models.V2
 
         [JsonProperty("playlist")]
         public List<PlaylistItem> Playlist;
+
+        /// <summary>Comma-joined surgeon names for display, or null when none.</summary>
+        public string SurgeonsText =>
+            Surgeons != null && Surgeons.Count > 0 ? string.Join(", ", Surgeons) : null;
+
+        /// <summary>First program id, or null when the project has none.</summary>
+        public string PrimaryProgramId =>
+            ProgramIds != null && ProgramIds.Count > 0 ? ProgramIds[0] : null;
     }
 
     /// <summary>

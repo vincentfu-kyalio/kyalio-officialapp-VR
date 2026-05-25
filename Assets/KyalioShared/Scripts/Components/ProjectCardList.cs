@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using UnityEngine;
 
 namespace Kyalio.Components
@@ -18,12 +18,12 @@ namespace Kyalio.Components
         private readonly List<ProjectCard> _active = new();
 
         // Click callback, set by the page script
-        public System.Action<SubscribedProject> OnProjectClicked;
+        public System.Action<Project> OnProjectClicked;
 
         /// <summary>
         /// Displays the list of projects.
         /// </summary>
-        public void Show(IReadOnlyList<SubscribedProject> projects)
+        public void Show(IReadOnlyList<Project> projects)
         {
             ReturnAll();
 
@@ -64,6 +64,7 @@ namespace Kyalio.Components
         {
             foreach (var card in _active)
             {
+                card.CancelLoads();
                 card.gameObject.SetActive(false);
                 _pool.Add(card);
             }

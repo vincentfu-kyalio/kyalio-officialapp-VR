@@ -1,7 +1,7 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Kyalio.Models;
-using Kyalio.Repositories;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using Kyalio.Utils;
 using TMPro;
 using UnityEngine;
@@ -26,11 +26,11 @@ namespace Kyalio.Components
         [SerializeField] private Image programLogo;
         [SerializeField] private Button button;
 
-        private SubscribedProject _project;
+        private Project _project;
         private CancellationTokenSource _cts;
 
         // Click callback, set by ProjectCardList
-        public System.Action<SubscribedProject> OnClicked;
+        public System.Action<Project> OnClicked;
 
         private void Awake()
         {
@@ -40,36 +40,32 @@ namespace Kyalio.Components
         /// <summary>
         /// Populates the card with data and loads the thumbnail.
         /// </summary>
-        public void Bind(SubscribedProject project)
+        public void Bind(Project project)
         {
             _project = project;
+            var repo = ProjectCacheRepository.Instance;
 
             // Title
-            titleText.text = project.Name;
+            titleText.text = project.ProjectName;
 
-            // Dr Name
+            // Surgeon names
             if (drNameText != null)
-                drNameText.text = project.DrName ?? string.Empty;
+                drNameText.text = project.SurgeonsText ?? string.Empty;
 
-            // Category
+            // Specialty
             if (categoryText != null)
-                categoryText.text = project.CategoryName ?? string.Empty;
+                categoryText.text = repo.GetSpecialtyName(project.SpecialtyId) ?? string.Empty;
 
-            // Playlist count — now directly from API
-            int videoCount = project.PlaylistCount > 0
-                ? project.PlaylistCount
-                : ProjectCacheRepository.Instance.GetVideoCount(project.Id);
+            // Playlist count — straight from the project DTO
+            int videoCount = project.PlaylistCount;
             if (numberText != null)
                 numberText.text = videoCount > 0 ? videoCount.ToString() : "";
             if (playlistSign != null)
                 playlistSign.SetActive(videoCount > 1);
 
             // Duration
-            int totalSec = project.PlaylistDurationSeconds > 0
-                ? project.PlaylistDurationSeconds
-                : ProjectCacheRepository.Instance.GetPlaylistDurationSeconds(project.Id);
             if (durationText != null)
-                durationText.text = FormatDuration(totalSec);
+                durationText.text = FormatDuration(project.PlaylistDurationSeconds);
 
             // Cancel previous loads
             _cts?.Cancel();
@@ -81,14 +77,15 @@ namespace Kyalio.Components
             bool hasThumbnail = !string.IsNullOrEmpty(project.ThumbnailUrl);
             thumbnail.gameObject.SetActive(hasThumbnail);
             if (hasThumbnail)
-                LoadThumbnailAsync(project.ThumbnailUrl, _cts.Token).Forget();
+                LoadThumbnailAsync(ThumbnailLoader.Resolve(project.ThumbnailUrl), _cts.Token).Forget();
 
             // Program logo
             if (programLogo != null)
             {
-                programLogo.gameObject.SetActive(!string.IsNullOrEmpty(project.ProgramPicUrl));
-                if (!string.IsNullOrEmpty(project.ProgramPicUrl))
-                    LoadProgramLogoAsync(project.ProgramPicUrl, _cts.Token).Forget();
+                var picUrl = repo.GetFirstProgram(project)?.PicUrl;
+                programLogo.gameObject.SetActive(!string.IsNullOrEmpty(picUrl));
+                if (!string.IsNullOrEmpty(picUrl))
+                    LoadProgramLogoAsync(ThumbnailLoader.Resolve(picUrl), _cts.Token).Forget();
             }
         }
 

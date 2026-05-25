@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
 using Kyalio.Dev;
-using Kyalio.Models;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using Kyalio.State;
 using TMPro;
 using UnityEngine;
+using AppState = Kyalio.State.V2.AppState;
 
 namespace Kyalio.Pages
 {
@@ -16,8 +16,10 @@ namespace Kyalio.Pages
     /// Series page: two-column layout.
     /// Left  — SeriesRolePanel sidebar: one button per role.
     /// Right — SeriesSection showing projects or episodes for the selected role.
-    /// Mode ("projects" / "episodes") is determined by the API response and
-    /// applied consistently to every role selection.
+    ///
+    /// Source data is the home payload's roles block (AppState.LastHome.Roles), whose
+    /// displayMode ("projects" / "episodes") decides which collection each role renders.
+    /// All ids are hydrated against the local Project cache.
     /// Inspector: rolePanel, rightPanelTitle, rightSection
     /// </summary>
     public class SeriesPage : MonoBehaviour, IPageHandler, IDevFakeData
@@ -26,12 +28,7 @@ namespace Kyalio.Pages
         [SerializeField] private TextMeshProUGUI rightPanelTitle;
         [SerializeField] private SeriesSection rightSection;
 
-        private const float CacheTtlSeconds = 60f;
-
-        private CancellationTokenSource _cts;
-        private List<RoleContentItem> _roles;
-        private string _responseMode = "projects";
-        private float _lastFetchedAt = float.MinValue;
+        private string _displayMode = HomeRolesDisplayMode.Projects;
 
         private void Awake()
         {
@@ -41,126 +38,54 @@ namespace Kyalio.Pages
 
         public void OnEnter(object param)
         {
-            if (DevFlags.UseFakeData) { LoadFakeData(); return; }
+            var roles = AppState.Instance.LastHome?.Roles;
 
-            // Roles already cached — re-select the first to refresh the right panel
-            if (_roles != null && Time.realtimeSinceStartup - _lastFetchedAt < CacheTtlSeconds)
-            {
-                rolePanel.SelectFirst();
-                return;
-            }
+            _displayMode = roles?.DisplayMode ?? HomeRolesDisplayMode.Projects;
 
-            _cts?.Cancel();
-            _cts = new CancellationTokenSource();
-            LoadAsync(_cts.Token).Forget();
+            rightSection?.Clear();
+            rolePanel?.Build(roles?.Items ?? new List<HomeRoleItem>());
+            rolePanel?.SelectFirst();
         }
 
-        public void OnExit()
-        {
-            _cts?.Cancel();
-        }
+        public void OnExit() { }
 
         [ContextMenu("Load Fake Data")]
-        public void LoadFakeData()
-        {
-            var roles = new List<RoleContentItem>
-            {
-                new RoleContentItem
-                {
-                    Id = "fake-role-001", Name = "Cardiology",
-                    Projects = new List<SubscribedProject>
-                    {
-                        new SubscribedProject { Id = "p001", Name = "Heart Anatomy VR",           DrName = "Chen Wei",   CategoryName = "Cardiology", PlaylistDurationSeconds = 2400, PlaylistCount = 3 },
-                        new SubscribedProject { Id = "p002", Name = "ECG Interpretation",         DrName = "Sarah Kim",  CategoryName = "Cardiology", PlaylistDurationSeconds = 1500, PlaylistCount = 2 },
-                        new SubscribedProject { Id = "p003", Name = "Cardiac Surgery Simulation", DrName = "Marcus Tan", CategoryName = "Cardiology", PlaylistDurationSeconds = 3600, PlaylistCount = 5 },
-                    }
-                },
-                new RoleContentItem
-                {
-                    Id = "fake-role-002", Name = "Neurology",
-                    Projects = new List<SubscribedProject>
-                    {
-                        new SubscribedProject { Id = "p004", Name = "Brain MRI Interpretation",   DrName = "James Roth", CategoryName = "Neurology",  PlaylistDurationSeconds = 2700, PlaylistCount = 4 },
-                        new SubscribedProject { Id = "p005", Name = "Stroke Response Training",   DrName = "James Roth", CategoryName = "Neurology",  PlaylistDurationSeconds = 1800, PlaylistCount = 2 },
-                    }
-                },
-                new RoleContentItem
-                {
-                    Id = "fake-role-003", Name = "Surgery",
-                    Projects = new List<SubscribedProject>
-                    {
-                        new SubscribedProject { Id = "p006", Name = "Laparoscopic Techniques",    DrName = "Marcus Tan", CategoryName = "Surgery",    PlaylistDurationSeconds = 3000, PlaylistCount = 4 },
-                        new SubscribedProject { Id = "p007", Name = "Wound Management",           DrName = "Emily Lau",  CategoryName = "Surgery",    PlaylistDurationSeconds = 1200, PlaylistCount = 2 },
-                    }
-                },
-                new RoleContentItem
-                {
-                    Id = "fake-role-004", Name = "General Practice",
-                    Projects = new List<SubscribedProject>
-                    {
-                        new SubscribedProject { Id = "p008", Name = "Patient Communication in VR", DrName = "Emily Lau",  CategoryName = "General Practice", PlaylistDurationSeconds = 1200, PlaylistCount = 1 },
-                        new SubscribedProject { Id = "p009", Name = "Preventive Medicine Basics",  DrName = "Alicia Wong",CategoryName = "General Practice", PlaylistDurationSeconds = 1800, PlaylistCount = 3 },
-                    }
-                },
-            };
-
-            _responseMode = "projects";
-            SetupRoles(roles);
-            rolePanel.SelectFirst();
-        }
-
-        // ── Load ──────────────────────────────────────────────────────
-
-        private async UniTaskVoid LoadAsync(CancellationToken ct)
-        {
-            try
-            {
-                var response = await ServiceLocator.Instance.ProjectService
-                    .GetRoleContentAsync(ct);
-
-                if (ct.IsCancellationRequested) return;
-
-                _lastFetchedAt = Time.realtimeSinceStartup;
-                _responseMode  = response.Mode ?? "projects";
-                SetupRoles(response.Items);
-                rolePanel.SelectFirst();
-            }
-            catch (OperationCanceledException) { }
-            catch (Exception e) { Debug.LogError($"[SeriesPage] Load failed: {e.Message}"); }
-        }
-
-        private void SetupRoles(List<RoleContentItem> roles)
-        {
-            _roles = roles;
-            rightSection?.Clear();
-            rolePanel?.Build(roles);
-        }
+        public void LoadFakeData() => OnEnter(null);
 
         // ── Role selection ────────────────────────────────────────────
 
-        private void OnRoleSelected(RoleContentItem role)
+        private void OnRoleSelected(HomeRoleItem role)
         {
             if (rightPanelTitle != null)
                 rightPanelTitle.text = role.Name;
 
             rightSection.Clear();
+            var repo = ProjectCacheRepository.Instance;
 
-            if (_responseMode == "episodes")
+            if (_displayMode == HomeRolesDisplayMode.Episodes)
             {
-                rightSection.OnEpisodeClicked = ep =>
+                rightSection.OnEpisodeClicked = (projectId, item) =>
                 {
                     PlaybackState.Instance.ClearPlaylist();
                     UIManager.Instance.GoTo(PageType.PlayVideo,
-                        new ValueTuple<string, PlaylistItem>(ep.ProjectId, ep));
+                        new ValueTuple<string, PlaylistItem>(projectId, item));
                 };
-                rightSection.BindEpisodes(role);
+
+                var episodes = new List<(string, PlaylistItem, int)>();
+                foreach (var ep in role.Episodes ?? new List<EpisodeRef>())
+                {
+                    var item = repo.GetVideo(ep.ProjectId, ep.VideoId);
+                    if (item == null) continue;
+                    episodes.Add((ep.ProjectId, item, repo.GetProgressMs(ep.VideoId)));
+                }
+                rightSection.BindEpisodes(episodes);
             }
             else
             {
                 rightSection.OnProjectClicked = p =>
                     UIManager.Instance.GoTo(PageType.ProjectInfo,
-                        new ProjectNavParam { ProjectId = p.Id, Source = "roles_content" });
-                rightSection.Bind(role);
+                        new Kyalio.Models.ProjectNavParam { ProjectId = p.ProjectId, Source = ProjectPageSource.Roles });
+                rightSection.Bind(repo.Hydrate(role.ProjectIds));
             }
         }
     }

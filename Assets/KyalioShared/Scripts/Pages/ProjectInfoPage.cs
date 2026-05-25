@@ -1,22 +1,26 @@
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
 using Kyalio.Dev;
-using Kyalio.Models;
-using Kyalio.Repositories;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using Kyalio.Services;
 using Kyalio.State;
 using Kyalio.Utils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using AppState = Kyalio.State.V2.AppState;
 
 namespace Kyalio.Pages
 {
     /// <summary>
-    /// Video / programme detail page.
-    /// param: string projectId
+    /// Project detail page.
+    /// param: ProjectNavParam (or a bare string projectId).
+    /// Detail comes from GET /api/projects/{projectId}; watch progress is merged from the
+    /// local progress cache (populated by /api/me/progress).
     /// </summary>
     public class ProjectInfoPage : MonoBehaviour, IPageHandler, IDevFakeData
     {
@@ -63,7 +67,7 @@ namespace Kyalio.Pages
         private string _sourceSearchEventId;
         private System.DateTime _startedAt;
         private bool _videoStarted;
-        private ProjectDetail _currentDetail;
+        private Project _currentDetail;
         private CancellationTokenSource _cts;
 
         private void OnValidate()
@@ -93,53 +97,39 @@ namespace Kyalio.Pages
 
             // Parse param first — both real and fake modes need the projectId.
             string incomingId = null;
-            if (param is ProjectNavParam nav)
+            if (param is Kyalio.Models.ProjectNavParam nav)
             {
                 incomingId            = nav.ProjectId;
-                _entrySource          = nav.Source ?? "direct";
+                _entrySource          = nav.Source ?? ProjectPageSource.Direct;
                 _sourceSearchEventId  = nav.SearchEventId;
             }
             else if (param is string s)
             {
                 incomingId           = s;
-                _entrySource         = "direct";
+                _entrySource         = ProjectPageSource.Direct;
                 _sourceSearchEventId = null;
-            }
-
-            if (DevFlags.UseFakeData)
-            {
-                if (!string.IsNullOrEmpty(incomingId))
-                {
-                    _projectId    = incomingId;
-                    _startedAt    = System.DateTime.UtcNow;
-                    _videoStarted = false;
-                }
-                LoadFakeData();
-                return;
             }
 
             if (!string.IsNullOrEmpty(incomingId))
             {
-                // Fresh navigation — load the new project
                 _projectId    = incomingId;
                 _startedAt    = System.DateTime.UtcNow;
                 _videoStarted = false;
-                _cts?.Cancel();
-                _cts = new CancellationTokenSource();
-                LoadAsync(_projectId, _cts.Token).Forget();
             }
             else if (string.IsNullOrEmpty(_projectId))
             {
-                // Returning via GoBack with no prior context — nothing to show
+                return; // Returning via GoBack with no prior context — nothing to show
+            }
+
+            if (DevFlags.UseFakeData)
+            {
+                LoadFakeData();
                 return;
             }
-            // else: returning via GoBack — re-fetch from API to get latest progress
-            else
-            {
-                _cts?.Cancel();
-                _cts = new CancellationTokenSource();
-                LoadAsync(_projectId, _cts.Token).Forget();
-            }
+
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+            LoadAsync(_projectId, _cts.Token).Forget();
         }
 
         public void OnExit()
@@ -160,17 +150,16 @@ namespace Kyalio.Pages
             var request = new ProjectPageSessionRequest
             {
                 ProjectId           = _projectId,
-                Source              = _entrySource ?? "direct",
+                Source              = _entrySource ?? ProjectPageSource.Direct,
                 StartedAt           = _startedAt.ToString("o"),
                 DurationMs          = (long)(System.DateTime.UtcNow - _startedAt).TotalMilliseconds,
                 VideoStarted        = _videoStarted,
                 SourceSearchEventId = _sourceSearchEventId,
-                DeviceType          = DeviceTypeHelper.Get(),
             };
 
             try
             {
-                await ServiceLocator.Instance.AnalyticsService
+                await ServiceLocator.Instance.V2.Analytics
                     .ReportProjectPageSessionAsync(request, System.Threading.CancellationToken.None);
             }
             catch (System.Exception e)
@@ -184,18 +173,19 @@ namespace Kyalio.Pages
         {
             try
             {
-                var detail = await ServiceLocator.Instance.ProjectService
-                    .GetProjectDetailAsync(projectId, ct);
+                var detail = await ServiceLocator.Instance.V2.Content
+                    .GetProjectAsync(projectId, ct);
                 if (ct.IsCancellationRequested) return;
 
-                ProjectCacheRepository.Instance.CacheDetail(detail);
+                ProjectCacheRepository.Instance.ApplyProjectDetail(detail);
                 BindDetail(detail);
 
                 if (thumbnailImage != null && !string.IsNullOrEmpty(detail.ThumbnailUrl))
                 {
                     thumbnailImage.sprite = null;
                     thumbnailImage.color  = new Color32(43, 43, 43, 255);
-                    var sprite = await Kyalio.Utils.ThumbnailLoader.LoadAsync(detail.ThumbnailUrl, ct);
+                    var sprite = await ThumbnailLoader.LoadAsync(
+                        ThumbnailLoader.Resolve(detail.ThumbnailUrl), ct);
                     if (sprite != null && !ct.IsCancellationRequested)
                     {
                         thumbnailImage.sprite = sprite;
@@ -210,14 +200,17 @@ namespace Kyalio.Pages
             }
         }
 
-        private void BindDetail(ProjectDetail detail)
+        private void BindDetail(Project detail)
         {
             _currentDetail = detail;
+            if (detail == null) return;
 
-            if (titleText != null)       titleText.text       = detail.Name ?? string.Empty;
-            if (categoryText != null)    categoryText.text    = detail.CategoryName ?? string.Empty;
-            if (contributorText != null) contributorText.text = detail.DrName ?? string.Empty;
-            if (programText != null)     programText.text     = detail.ProgramName ?? string.Empty;
+            var repo = ProjectCacheRepository.Instance;
+
+            if (titleText != null)       titleText.text       = detail.ProjectName ?? string.Empty;
+            if (categoryText != null)    categoryText.text    = repo.GetSpecialtyName(detail.SpecialtyId) ?? string.Empty;
+            if (contributorText != null) contributorText.text = detail.SurgeonsText ?? string.Empty;
+            if (programText != null)     programText.text     = repo.GetFirstProgram(detail)?.Name ?? string.Empty;
             if (descriptionText != null) descriptionText.text = detail.Description ?? string.Empty;
 
             if (durationText != null)
@@ -230,7 +223,7 @@ namespace Kyalio.Pages
             RefreshFavoriteButton();
             RefreshDownloadAllUI();
 
-            var playlist = detail.Playlist ?? new System.Collections.Generic.List<PlaylistItem>();
+            var playlist = detail.Playlist ?? new List<PlaylistItem>();
             RefreshPlaylistCountText(playlist.Count);
             ClearPlaylistRows();
             RefreshOverallProgress(playlist);
@@ -254,84 +247,9 @@ namespace Kyalio.Pages
         [ContextMenu("Load Fake Data")]
         public void LoadFakeData()
         {
-            // Look up the specific project that was navigated to.
-            // HomePage.LoadFakeData() pre-populates ProjectCacheRepository,
-            // so we can find any fake project by its ID here.
-            var project = ProjectCacheRepository.Instance.AllProjects
-                .Find(p => p.Id == _projectId);
-
-            var detail = project != null
-                ? BuildFakeDetail(project)
-                : BuildFallbackFakeDetail();
-
-            BindDetail(detail);
-        }
-
-        /// <summary>
-        /// Generates a ProjectDetail from a SubscribedProject using evenly distributed
-        /// fake playlist items. Called when the project exists in the fake data cache.
-        /// </summary>
-        private static ProjectDetail BuildFakeDetail(SubscribedProject project)
-        {
-            int count          = System.Math.Max(1, project.PlaylistCount);
-            long totalDurationMs = (long)project.PlaylistDurationSeconds * 1000L;
-            long episodeDurationMs = totalDurationMs / count;
-            long episodeSizeBytes  = 2_000_000_000L / count;
-
-            var playlist = new System.Collections.Generic.List<PlaylistItem>();
-            for (int i = 1; i <= count; i++)
-            {
-                playlist.Add(new PlaylistItem
-                {
-                    Ordinal        = i,
-                    Title          = $"Episode {i}",
-                    DurationMs     = (int?)episodeDurationMs,
-                    SizeBytes      = episodeSizeBytes,
-                    ProgressMs     = i == 1 ? (int)(episodeDurationMs * 0.4) : 0,
-                    MediaVideoId   = $"fake-vid-{project.Id}-{i:D2}",
-                    ProjectionType = i % 2 == 0 ? "360" : "180",
-                    StereoLayout   = i % 2 == 0 ? null  : "sbs",
-                });
-            }
-
-            return new ProjectDetail
-            {
-                Id                      = project.Id,
-                Name                    = project.Name,
-                CategoryName            = project.CategoryName,
-                DrName                  = project.DrName,
-                ProgramName             = project.ProgramName,
-                PlaylistDurationSeconds = project.PlaylistDurationSeconds,
-                PlaylistCount           = count,
-                Playlist                = playlist,
-            };
-        }
-
-        /// <summary>
-        /// Hardcoded fallback used when no matching project is found in the fake data cache
-        /// (e.g. DevBootstrapper navigates directly to ProjectInfo without going through HomePage).
-        /// </summary>
-        private static ProjectDetail BuildFallbackFakeDetail()
-        {
-            var playlist = new System.Collections.Generic.List<PlaylistItem>
-            {
-                new PlaylistItem { Ordinal = 1,  Title = "Introduction to VR Medicine",          DurationMs = 1_845_000, SizeBytes = 2_684_354_560L, ProgressMs = 923_000,   MediaVideoId = "fake-vid-001", StereoLayout = "sbs", ProjectionType = "180" },
-                new PlaylistItem { Ordinal = 2,  Title = "Surgical Simulation — Module 1",       DurationMs = 2_460_000, SizeBytes = 3_758_096_384L, ProgressMs = 0,         MediaVideoId = "fake-vid-002", StereoLayout = "sbs", ProjectionType = "180" },
-                new PlaylistItem { Ordinal = 3,  Title = "Patient Communication in VR",          DurationMs = 1_200_000, SizeBytes = 1_610_612_736L, ProgressMs = 1_200_000, MediaVideoId = "fake-vid-003", ProjectionType = "360" },
-                new PlaylistItem { Ordinal = 4,  Title = "Anatomy — The Cardiovascular System",  DurationMs = 1_560_000, SizeBytes = 2_147_483_648L, ProgressMs = 0,         MediaVideoId = "fake-vid-004", ProjectionType = "360" },
-                new PlaylistItem { Ordinal = 5,  Title = "Surgical Simulation — Module 2",       DurationMs = 2_700_000, SizeBytes = 3_221_225_472L, ProgressMs = 540_000,   MediaVideoId = "fake-vid-005", StereoLayout = "sbs", ProjectionType = "180" },
-            };
-
-            return new ProjectDetail
-            {
-                Id                      = "fake-project-001",
-                Name                    = "VR Medical Training Series",
-                CategoryName            = "Medical Education",
-                DrName                  = "Sarah Chen",
-                ProgramName             = "Advanced Clinical Skills Program",
-                PlaylistDurationSeconds = 9_765,
-                Playlist                = playlist,
-            };
+            // The dev seeder populates the V2 cache with full projects (incl. playlists),
+            // so just bind the cached project.
+            BindDetail(ProjectCacheRepository.Instance.Get(_projectId));
         }
 
         // ── Download All — State Machine ──────────────────────────────
@@ -342,13 +260,11 @@ namespace Kyalio.Pages
             var playlist = _currentDetail?.Playlist;
             if (playlist == null || playlist.Count == 0) return ProjectDownloadState.Idle;
 
-            // AllDownloaded takes priority: when OnCompleted fires, _current is still non-null,
-            // so confirm the local record first to avoid a false Downloading state (same fix as in PlaylistItemRow).
             bool allDownloaded = true;
             foreach (var item in playlist)
             {
-                if (string.IsNullOrEmpty(item.MediaVideoId)) continue;
-                if (!DownloadedVideoState.Instance.HasDownload(_projectId, item.MediaVideoId))
+                if (string.IsNullOrEmpty(item.VideoId)) continue;
+                if (!DownloadedVideoState.Instance.HasDownload(_projectId, item.VideoId))
                 { allDownloaded = false; break; }
             }
             if (allDownloaded) return ProjectDownloadState.AllDownloaded;
@@ -356,14 +272,12 @@ namespace Kyalio.Pages
             var dm = DownloadManager.Instance;
             if (dm != null)
             {
-                // Downloading only when every item is either already downloaded or queued/active —
-                // a single episode being queued must not flip the Download All button into Downloading state.
                 bool allCommitted = true;
                 foreach (var item in playlist)
                 {
-                    if (string.IsNullOrEmpty(item.MediaVideoId)) continue;
-                    if (!DownloadedVideoState.Instance.HasDownload(_projectId, item.MediaVideoId) &&
-                        !dm.IsActive(_projectId, item.MediaVideoId))
+                    if (string.IsNullOrEmpty(item.VideoId)) continue;
+                    if (!DownloadedVideoState.Instance.HasDownload(_projectId, item.VideoId) &&
+                        !dm.IsActive(_projectId, item.VideoId))
                     { allCommitted = false; break; }
                 }
                 if (allCommitted) return ProjectDownloadState.Downloading;
@@ -379,17 +293,14 @@ namespace Kyalio.Pages
             var state = GetProjectDownloadState();
             bool isDownloading = state == ProjectDownloadState.Downloading;
 
-            // Button is always visible and clickable; while downloading it acts as cancel.
             downloadAllButton.interactable = true;
 
-            // Downloading: hide status image, show progress slider
             if (downloadAllStatusImage != null)
                 downloadAllStatusImage.gameObject.SetActive(!isDownloading);
 
             if (downloadAllProgressSlider != null)
                 downloadAllProgressSlider.gameObject.SetActive(isDownloading);
 
-            // Not downloading: update sprite
             if (downloadAllStatusImage != null && !isDownloading)
             {
                 downloadAllStatusImage.sprite = state == ProjectDownloadState.AllDownloaded
@@ -445,13 +356,13 @@ namespace Kyalio.Pages
 
             foreach (var item in playlist)
             {
-                if (string.IsNullOrEmpty(item.MediaVideoId)) continue;
-                long size = item.SizeBytes ?? 0;
+                if (string.IsNullOrEmpty(item.VideoId)) continue;
+                long size = item.SizeBytes;
                 totalSize += size;
 
-                if (DownloadedVideoState.Instance.HasDownload(_projectId, item.MediaVideoId))
+                if (DownloadedVideoState.Instance.HasDownload(_projectId, item.VideoId))
                     downloadedSize += size;
-                else if (item.MediaVideoId == currentVideoId)
+                else if (item.VideoId == currentVideoId)
                     downloadedSize += (long)(size * currentEpisodeProgress);
             }
 
@@ -500,10 +411,11 @@ namespace Kyalio.Pages
                 await tcs.Task;
                 if (!confirmed) return;
 
+                var dm = DownloadManager.Instance;
                 foreach (var item in playlist)
                 {
-                    if (!string.IsNullOrEmpty(item.MediaVideoId))
-                        DownloadedVideoState.Instance.RemoveRecord(_projectId, item.MediaVideoId);
+                    if (!string.IsNullOrEmpty(item.VideoId))
+                        dm?.Delete(_projectId, item.VideoId);
                 }
                 RefreshDownloadAllUI();
                 return;
@@ -526,8 +438,8 @@ namespace Kyalio.Pages
 
                 foreach (var item in playlist)
                 {
-                    if (string.IsNullOrEmpty(item.MediaVideoId)) continue;
-                    dm.Cancel(_projectId, item.MediaVideoId);
+                    if (string.IsNullOrEmpty(item.VideoId)) continue;
+                    dm.Cancel(_projectId, item.VideoId);
                 }
 
                 RefreshDownloadAllUI();
@@ -557,12 +469,11 @@ namespace Kyalio.Pages
 
                 foreach (var item in playlist)
                 {
-                    if (string.IsNullOrEmpty(item.MediaVideoId)) continue;
-                    if (DownloadedVideoState.Instance.HasDownload(_projectId, item.MediaVideoId)) continue;
-                    dm.Enqueue(_projectId, item.MediaVideoId, item.SizeBytes ?? 0);
+                    if (string.IsNullOrEmpty(item.VideoId)) continue;
+                    if (DownloadedVideoState.Instance.HasDownload(_projectId, item.VideoId)) continue;
+                    dm.Enqueue(_projectId, item.VideoId, item.SizeBytes);
                 }
             }
-            // Downloading state: button is non-interactable, this path should not be reached
         }
 
         // ── Play All ──────────────────────────────────────────────────
@@ -579,28 +490,28 @@ namespace Kyalio.Pages
         }
 
         /// <summary>
-        /// Finds the playlist index to resume from using server-returned ProgressMs values.
-        /// Returns the first in-progress (not yet complete) episode.
-        /// If all watched episodes are complete, returns the one after the last completed episode.
-        /// Falls back to index 0 if no progress data exists.
+        /// Finds the playlist index to resume from using cached per-video progress.
+        /// Returns the first in-progress (not yet complete) episode; if all watched
+        /// episodes are complete, the one after the last completed; else index 0.
         /// </summary>
-        private static int FindResumeIndex(System.Collections.Generic.List<PlaylistItem> playlist)
+        private static int FindResumeIndex(List<PlaylistItem> playlist)
         {
+            var repo = ProjectCacheRepository.Instance;
             int lastCompletedIdx = -1;
 
             for (int i = 0; i < playlist.Count; i++)
             {
                 var item = playlist[i];
-                if (item.ProgressMs <= 0) continue;
+                int progressMs = repo.GetProgressMs(item.VideoId);
+                if (progressMs <= 0) continue;
 
-                long dur = item.DurationMs ?? 0;
-                bool isNearlyComplete = dur > 0 && item.ProgressMs >= (long)(dur * 0.95);
+                long dur = item.DurationMs;
+                bool isNearlyComplete = dur > 0 && progressMs >= (long)(dur * 0.95);
 
                 if (!isNearlyComplete) return i;   // in-progress episode — resume here
                 lastCompletedIdx = i;
             }
 
-            // All watched episodes are complete → start after the last completed one
             if (lastCompletedIdx >= 0 && lastCompletedIdx + 1 < playlist.Count)
                 return lastCompletedIdx + 1;
 
@@ -627,9 +538,9 @@ namespace Kyalio.Pages
             try
             {
                 if (wasFav)
-                    await ServiceLocator.Instance.FavoriteService.RemoveFavoriteAsync(_projectId);
+                    await ServiceLocator.Instance.V2.Favorites.RemoveFavoriteAsync(_projectId);
                 else
-                    await ServiceLocator.Instance.FavoriteService.AddFavoriteAsync(_projectId);
+                    await ServiceLocator.Instance.V2.Favorites.AddFavoriteAsync(_projectId);
 
                 AppState.Instance.MarkFavoritesDirty();
             }
@@ -653,18 +564,19 @@ namespace Kyalio.Pages
         }
 
         // ── Overall Progress ──────────────────────────────────────────
-        private void RefreshOverallProgress(System.Collections.Generic.List<PlaylistItem> playlist)
+        private void RefreshOverallProgress(List<PlaylistItem> playlist)
         {
             if (overallProgressSlider == null) return;
 
+            var repo = ProjectCacheRepository.Instance;
             long totalDurationMs = 0;
             long totalProgressMs = 0;
 
             foreach (var item in playlist)
             {
-                long dur = item.DurationMs ?? 0;
+                long dur = item.DurationMs;
                 totalDurationMs += dur;
-                totalProgressMs += System.Math.Min(item.ProgressMs, dur);
+                totalProgressMs += System.Math.Min(repo.GetProgressMs(item.VideoId), dur);
             }
 
             float progress = totalDurationMs > 0
@@ -711,35 +623,29 @@ namespace Kyalio.Pages
                 : $"{t.Minutes}m {t.Seconds:D2}s";
         }
 
-        private static string ResolveVideoTypeLabel(ProjectDetail detail)
+        private static string ResolveVideoTypeLabel(Project detail)
         {
             var playlist = detail.Playlist;
             if (playlist == null || playlist.Count == 0) return "2D";
-            var first  = playlist[0];
-            var stereo = (first.StereoLayout ?? string.Empty).ToLower();
-            var proj   = (first.ProjectionType ?? string.Empty).ToLower();
-            bool isSBS = stereo.Contains("sbs") || stereo.Contains("side");
-            bool isTB  = stereo.Contains("tb")  || stereo.Contains("top");
-            bool is360 = proj.Contains("360");
-            bool is180 = proj.Contains("180") || proj.Contains("vr180");
-            if (isSBS) return is180 ? "3D 180°"  : is360 ? "3D 360°"  : "3D";
-            if (isTB)  return is180 ? "180° TB"  : is360 ? "360° TB"  : "3D TB";
-            if (is180) return "180°";
-            if (is360) return "360°";
-            return "2D";
+            return playlist[0].PlaybackMode switch
+            {
+                PlaybackMode.Vr180Sbs  => "3D 180°",
+                PlaybackMode.Vr360Mono => "360°",
+                _                      => "2D",
+            };
         }
 
-        private static string FormatTotalSize(ProjectDetail detail)
+        private static string FormatTotalSize(Project detail)
         {
-            if (detail.Playlist == null) return string.Empty;
-            long total = 0;
-            foreach (var item in detail.Playlist)
-                total += item.SizeBytes ?? 0;
+            long total = detail.TotalSizeBytes;
+            if (total <= 0 && detail.Playlist != null)
+                foreach (var item in detail.Playlist)
+                    total += item.SizeBytes;
+
             if (total <= 0) return string.Empty;
             if (total >= 1_073_741_824) return $"{total / 1_073_741_824.0:F1} GB";
             if (total >= 1_048_576)     return $"{total / 1_048_576.0:F0} MB";
             return $"{total / 1024.0:F0} KB";
         }
-
     }
 }

@@ -25,6 +25,21 @@ namespace Kyalio.Utils
         private static readonly Dictionary<string, UniTaskCompletionSource<Sprite>> _pending = new();
 
         /// <summary>
+        /// Resolves a (possibly relative) image URL. The V2 contract returns relative
+        /// auth-gated proxy paths (e.g. /api/projects/{id}/thumbnail) for project thumbnails
+        /// and program logos; signed Mux playlist thumbnails come back absolute. Relative
+        /// paths are joined against the API base URL; absolute URLs pass through unchanged.
+        /// </summary>
+        public static string Resolve(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return url;
+            if (url.StartsWith("http://") || url.StartsWith("https://")) return url;
+            var baseUrl = ServiceLocator.Instance.ApiBaseUrl;
+            if (string.IsNullOrEmpty(baseUrl)) return url;
+            return url.StartsWith("/") ? baseUrl + url : $"{baseUrl}/{url}";
+        }
+
+        /// <summary>
         /// Loads a thumbnail and returns a Sprite; returns null on failure.
         /// </summary>
         public static async UniTask<Sprite> LoadAsync(string url, CancellationToken ct = default)

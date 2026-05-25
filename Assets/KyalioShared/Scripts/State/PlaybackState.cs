@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 
 namespace Kyalio.State
 {

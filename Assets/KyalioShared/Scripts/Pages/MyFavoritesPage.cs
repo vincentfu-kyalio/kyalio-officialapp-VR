@@ -6,18 +6,21 @@ using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
 using Kyalio.Dev;
-using Kyalio.Models;
-using Kyalio.Repositories;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
+using Kyalio.Services;
 using Kyalio.State;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using AppState = Kyalio.State.V2.AppState;
 
 namespace Kyalio.Pages
 {
     /// <summary>
     /// Shared panel for Favorites and Downloads lists. Set _mode in the Inspector.
-    /// In fake data mode reads from FakeDataSeeder; otherwise calls the API / local state.
+    /// Favorites come from GET /api/favorites (ids only) and are hydrated from the local
+    /// Project cache; downloads come from local DownloadedVideoState.
     ///
     /// Inspector:
     ///   _mode, titleText
@@ -131,7 +134,7 @@ namespace Kyalio.Pages
 
         private async UniTask LoadFavoritesAsync(CancellationToken ct)
         {
-            var response = await ServiceLocator.Instance.FavoriteService.GetFavoritesAsync(ct);
+            var response = await ServiceLocator.Instance.V2.Favorites.GetFavoritesAsync(ct);
             if (ct.IsCancellationRequested) return;
 
             var items = response?.Items;
@@ -144,12 +147,20 @@ namespace Kyalio.Pages
         private void BindFavoriteItems(List<FavoriteItem> items)
         {
             ClearList();
+            var repo = ProjectCacheRepository.Instance;
             int count = 0;
-            foreach (var fav in items)
+            foreach (var fav in items ?? new List<FavoriteItem>())
             {
                 if (fav.ProjectId == null) continue;
-                SpawnItem(fav.ProjectId, fav.ProjectName, fav.CategoryName,
-                    fav.DrName, fav.ThumbnailUrl, fav.ProgramPicUrl, fav.VideoCount, true);
+                var p = repo.Get(fav.ProjectId);
+                SpawnItem(fav.ProjectId,
+                    p?.ProjectName,
+                    repo.GetSpecialtyName(p?.SpecialtyId),
+                    p?.SurgeonsText,
+                    p?.ThumbnailUrl,
+                    repo.GetFirstProgram(p)?.PicUrl,
+                    p?.PlaylistCount ?? 0,
+                    true);
                 count++;
             }
             if (projectCountText != null)
@@ -159,6 +170,7 @@ namespace Kyalio.Pages
         private void LoadDownloads()
         {
             var records = DownloadedVideoState.Instance.Records;
+            var repo    = ProjectCacheRepository.Instance;
 
             int totalVideos = records.Count;
             long totalBytes = records.Sum(r => r.SizeBytes);
@@ -176,16 +188,16 @@ namespace Kyalio.Pages
             {
                 if (!seen.Add(record.ProjectId)) continue;
 
-                var p = ProjectCacheRepository.Instance.AllProjects
-                    .Find(x => x.Id == record.ProjectId);
+                var p = repo.Get(record.ProjectId);
                 if (p == null) continue;
 
                 long projectBytes = records
-                    .Where(r => r.ProjectId == p.Id)
+                    .Where(r => r.ProjectId == p.ProjectId)
                     .Sum(r => r.SizeBytes);
 
-                SpawnItem(p.Id, p.Name, p.CategoryName,
-                    FormatBytes(projectBytes), p.ThumbnailUrl, p.ProgramPicUrl, p.PlaylistCount, false);
+                SpawnItem(p.ProjectId, p.ProjectName, repo.GetSpecialtyName(p.SpecialtyId),
+                    FormatBytes(projectBytes), p.ThumbnailUrl, repo.GetFirstProgram(p)?.PicUrl,
+                    p.PlaylistCount, false);
             }
         }
 
@@ -195,7 +207,7 @@ namespace Kyalio.Pages
             var item = Instantiate(itemPrefab, listContainer);
             item.OnSelectionChanged = OnItemSelectionChanged;
             item.OnItemClicked = pid => UIManager.Instance.GoTo(PageType.ProjectInfo,
-                new ProjectNavParam { ProjectId = pid, Source = "favorites" });
+                new Kyalio.Models.ProjectNavParam { ProjectId = pid, Source = ProjectPageSource.Favorites });
             item.Bind(projectId, title, category, drName, thumbnailUrl, programPicUrl, videoCount, prefixWithDr);
             item.SetEditMode(_isEditMode);
             _items.Add(item);
@@ -307,7 +319,7 @@ namespace Kyalio.Pages
                 if (_mode == ListMode.Favorites)
                 {
                     var tasks = toDelete.Select(pid =>
-                        ServiceLocator.Instance.FavoriteService.RemoveFavoriteAsync(pid, ct));
+                        ServiceLocator.Instance.V2.Favorites.RemoveFavoriteAsync(pid, ct));
                     await UniTask.WhenAll(tasks);
                     if (ct.IsCancellationRequested) return;
                     UserLocalState.Instance.RemoveFavorites(toDelete);
@@ -315,8 +327,18 @@ namespace Kyalio.Pages
                 }
                 else
                 {
+                    var dm = DownloadManager.Instance;
                     foreach (var pid in toDelete)
+                    {
+                        // Notify the server per video, then drop the local file/record.
+                        var videoIds = DownloadedVideoState.Instance.Records
+                            .Where(r => r.ProjectId == pid)
+                            .Select(r => r.VideoId)
+                            .ToList();
+                        foreach (var vid in videoIds)
+                            dm?.Delete(pid, vid);
                         DownloadedVideoState.Instance.RemoveAllForProject(pid);
+                    }
                 }
 
                 await LoadListAsync(ct);

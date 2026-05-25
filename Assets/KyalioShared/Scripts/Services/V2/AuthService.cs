@@ -69,6 +69,13 @@ namespace Kyalio.Services.V2
                     _          => null,
                 },
                 ct);
+        /// <summary>
+        /// POST /api/pair/verify — confirm a 6-digit pairing code. Returns 204 on success;
+        /// throws ApiException 404 (unknown/expired) or 409 (already used).
+        /// </summary>
+        public UniTask VerifyPairAsync(string code, CancellationToken ct = default)
+            => _client.PostBodyAsync("/api/pair/verify", new PairVerifyRequest { Code = code }, ct);
+
         // ── Mobile login / refresh / devices / forgot ────────────────
         // (Kept here for parity with the mobile build; the Quest app does not call them.)
 

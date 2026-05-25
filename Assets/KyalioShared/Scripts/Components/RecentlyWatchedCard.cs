@@ -1,7 +1,7 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Kyalio.Models;
-using Kyalio.Repositories;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using Kyalio.Utils;
 using TMPro;
 using UnityEngine;
@@ -11,6 +11,7 @@ namespace Kyalio.Components
 {
     /// <summary>
     /// Recently Watched card (RW_block.prefab).
+    /// Binds a V2 WatchHistoryItem and hydrates display metadata from the local Project cache.
     /// Inspector: thumbnail, programLogo, titleText, categoryText, episodeText, progressBar, playlistSign, button
     /// </summary>
     public class RecentlyWatchedCard : MonoBehaviour
@@ -35,24 +36,34 @@ namespace Kyalio.Components
             button.onClick.AddListener(() => OnClicked?.Invoke(_projectId, _videoId));
         }
 
-        public void Bind(WatchHistoryProjectItem item)
+        public void Bind(WatchHistoryItem item)
         {
             _projectId = item.ProjectId;
-            _videoId   = item.LatestEpisode.MediaVideoId;
+            _videoId   = item.VideoId;
 
-            titleText.text = item.ProjectName;
+            var repo    = ProjectCacheRepository.Instance;
+            var project = repo.Get(item.ProjectId);
+            var video   = repo.GetVideo(item.ProjectId, item.VideoId);
+
+            titleText.text = project?.ProjectName ?? string.Empty;
             if (categoryText != null)
-                categoryText.text = item.CategoryName ?? string.Empty;
+                categoryText.text = repo.GetSpecialtyName(project?.SpecialtyId) ?? string.Empty;
 
             if (episodeText != null)
-                episodeText.text = (item.LatestEpisode.Ordinal + 1).ToString(); // Ordinal is 0-based
+            {
+                int idx = repo.GetVideoIndex(item.ProjectId, item.VideoId);
+                episodeText.text = idx >= 0 ? (idx + 1).ToString() : string.Empty;
+            }
 
             if (progressBar != null)
-                progressBar.value = item.LatestEpisode.DurationMs > 0
-                    ? Mathf.Clamp01((float)item.LatestEpisode.ProgressMs / item.LatestEpisode.DurationMs)
+            {
+                int durationMs = video?.DurationMs ?? 0;
+                progressBar.value = durationMs > 0
+                    ? Mathf.Clamp01((float)item.ProgressMs / durationMs)
                     : 0f;
+            }
 
-            int videoCount = ProjectCacheRepository.Instance.GetVideoCount(item.ProjectId);
+            int videoCount = project?.PlaylistCount ?? 0;
             if (playlistSign != null)
                 playlistSign.SetActive(videoCount > 1);
 
@@ -61,15 +72,17 @@ namespace Kyalio.Components
 
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
-            LoadThumbnailAsync(item.ThumbnailUrl, _cts.Token).Forget();
+            var thumbUrl = video?.ThumbnailUrl ?? project?.ThumbnailUrl;
+            if (!string.IsNullOrEmpty(thumbUrl))
+                LoadThumbnailAsync(ThumbnailLoader.Resolve(thumbUrl), _cts.Token).Forget();
 
             if (programLogo != null)
             {
-                bool hasProgramLogo = !string.IsNullOrEmpty(item.ProgramPicUrl);
+                var picUrl = repo.GetFirstProgram(project)?.PicUrl;
                 programLogo.sprite = null;
-                programLogo.gameObject.SetActive(hasProgramLogo);
-                if (hasProgramLogo)
-                    LoadProgramLogoAsync(item.ProgramPicUrl, _cts.Token).Forget();
+                programLogo.gameObject.SetActive(!string.IsNullOrEmpty(picUrl));
+                if (!string.IsNullOrEmpty(picUrl))
+                    LoadProgramLogoAsync(ThumbnailLoader.Resolve(picUrl), _cts.Token).Forget();
             }
         }
 

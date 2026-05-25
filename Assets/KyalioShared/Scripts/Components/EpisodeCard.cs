@@ -1,6 +1,6 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using Kyalio.Utils;
 using TMPro;
 using UnityEngine;
@@ -10,7 +10,7 @@ namespace Kyalio.Components
 {
     /// <summary>
     /// Episode card for the Series page (episodes mode).
-    /// Displays a single RoleContentEpisode with thumbnail, title, duration, and a progress bar placeholder.
+    /// Displays a single playlist video plus its watch-progress bar.
     /// Inspector: thumbnail, titleText, durationText, progressBar, button
     /// </summary>
     public class EpisodeCard : MonoBehaviour
@@ -21,34 +21,37 @@ namespace Kyalio.Components
         [SerializeField] private Slider progressBar;
         [SerializeField] private Button button;
 
-        private RoleContentEpisode _episode;
+        private string _projectId;
+        private PlaylistItem _item;
         private CancellationTokenSource _cts;
 
-        public System.Action<RoleContentEpisode> OnClicked;
+        /// <summary>(projectId, video) of the clicked episode.</summary>
+        public System.Action<string, PlaylistItem> OnClicked;
 
         private void Awake()
         {
-            button.onClick.AddListener(() => OnClicked?.Invoke(_episode));
+            button.onClick.AddListener(() => OnClicked?.Invoke(_projectId, _item));
 
             if (progressBar != null)
                 progressBar.interactable = false;
         }
 
-        public void Bind(RoleContentEpisode episode)
+        public void Bind(string projectId, PlaylistItem item, int progressMs)
         {
-            _episode = episode;
+            _projectId = projectId;
+            _item      = item;
 
-            titleText.text = episode.Title ?? string.Empty;
+            titleText.text = item.Title ?? string.Empty;
 
             if (durationText != null)
-                durationText.text = FormatDuration(episode.DurationMs);
+                durationText.text = FormatDuration(item.DurationMs);
 
             if (progressBar != null)
             {
-                bool hasProgress = episode.ProgressMs > 0;
+                bool hasProgress = progressMs > 0 && item.DurationMs > 0;
                 progressBar.gameObject.SetActive(hasProgress);
-                progressBar.value = (hasProgress && episode.DurationMs.HasValue && episode.DurationMs.Value > 0)
-                    ? Mathf.Clamp01((float)episode.ProgressMs / episode.DurationMs.Value)
+                progressBar.value = hasProgress
+                    ? Mathf.Clamp01((float)progressMs / item.DurationMs)
                     : 0f;
             }
 
@@ -57,10 +60,10 @@ namespace Kyalio.Components
 
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
-            bool hasThumbnail = !string.IsNullOrEmpty(episode.ThumbnailUrl);
+            bool hasThumbnail = !string.IsNullOrEmpty(item.ThumbnailUrl);
             thumbnail.gameObject.SetActive(hasThumbnail);
             if (hasThumbnail)
-                LoadThumbnailAsync(episode.ThumbnailUrl, _cts.Token).Forget();
+                LoadThumbnailAsync(ThumbnailLoader.Resolve(item.ThumbnailUrl), _cts.Token).Forget();
         }
 
         private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
@@ -73,10 +76,10 @@ namespace Kyalio.Components
             }
         }
 
-        private static string FormatDuration(int? durationMs)
+        private static string FormatDuration(int durationMs)
         {
-            if (durationMs == null || durationMs <= 0) return string.Empty;
-            var t = System.TimeSpan.FromMilliseconds(durationMs.Value);
+            if (durationMs <= 0) return string.Empty;
+            var t = System.TimeSpan.FromMilliseconds(durationMs);
             return t.TotalHours >= 1
                 ? $"{(int)t.TotalHours}h {t.Minutes:D2}m"
                 : $"{t.Minutes}m {t.Seconds:D2}s";

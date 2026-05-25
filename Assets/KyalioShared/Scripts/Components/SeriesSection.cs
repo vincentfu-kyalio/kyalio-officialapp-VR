@@ -1,14 +1,14 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using UnityEngine;
 
 namespace Kyalio.Components
 {
     /// <summary>
     /// Content area for the Series page right column.
-    /// Supports two modes driven by GET /api/roles/content:
-    ///   - projects mode: Bind(RoleContentItem)        — shows ProjectCards
-    ///   - episodes mode: BindEpisodes(RoleContentItem) — shows EpisodeCards
+    /// Supports the two home-roles display modes:
+    ///   - projects mode: Bind(projects)        — shows ProjectCards
+    ///   - episodes mode: BindEpisodes(episodes) — shows EpisodeCards
     /// Title and navigation are owned by SeriesPage; this component only manages card pooling.
     /// Inspector: seriesContent, projectCardPrefab, episodeCardPrefab
     /// </summary>
@@ -24,19 +24,21 @@ namespace Kyalio.Components
         private readonly List<EpisodeCard> _episodePool  = new();
         private readonly List<EpisodeCard> _episodeActive = new();
 
-        public System.Action<SubscribedProject>  OnProjectClicked;
-        public System.Action<RoleContentEpisode> OnEpisodeClicked;
+        public System.Action<Project> OnProjectClicked;
+
+        /// <summary>(projectId, video) of the clicked episode.</summary>
+        public System.Action<string, PlaylistItem> OnEpisodeClicked;
 
         // ── Public API ────────────────────────────────────────────────
 
         /// <summary>Projects mode — shows a ProjectCard per project.</summary>
-        public void Bind(RoleContentItem role)
+        public void Bind(IReadOnlyList<Project> projects)
         {
             ReturnAllEpisodes();
             ReturnAllProjects();
 
-            if (role.Projects == null) return;
-            foreach (var p in role.Projects)
+            if (projects == null) return;
+            foreach (var p in projects)
             {
                 var card = GetProjectCard();
                 card.OnClicked = proj => OnProjectClicked?.Invoke(proj);
@@ -44,18 +46,19 @@ namespace Kyalio.Components
             }
         }
 
-        /// <summary>Episodes mode — shows an EpisodeCard per episode.</summary>
-        public void BindEpisodes(RoleContentItem role)
+        /// <summary>Episodes mode — shows an EpisodeCard per (project, video, progress).</summary>
+        public void BindEpisodes(IReadOnlyList<(string projectId, PlaylistItem item, int progressMs)> episodes)
         {
             ReturnAllProjects();
             ReturnAllEpisodes();
 
-            if (role.Episodes == null) return;
-            foreach (var ep in role.Episodes)
+            if (episodes == null) return;
+            foreach (var ep in episodes)
             {
+                if (ep.item == null) continue;
                 var card = GetEpisodeCard();
-                card.OnClicked = episode => OnEpisodeClicked?.Invoke(episode);
-                card.Bind(ep);
+                card.OnClicked = (pid, item) => OnEpisodeClicked?.Invoke(pid, item);
+                card.Bind(ep.projectId, ep.item, ep.progressMs);
             }
         }
 
@@ -88,6 +91,7 @@ namespace Kyalio.Components
         {
             foreach (var c in _projectActive)
             {
+                c.CancelLoads();
                 c.gameObject.SetActive(false);
                 _projectPool.Add(c);
             }

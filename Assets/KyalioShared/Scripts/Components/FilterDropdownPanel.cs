@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -30,7 +30,7 @@ namespace Kyalio.Components
         /// <summary>
         /// Rebuilds the checklist. Pre-checks items whose IDs are in selectedIds.
         /// </summary>
-        public void Build(List<Category> categories, HashSet<string> selectedIds)
+        public void Build(List<IdNameRef> categories, HashSet<string> selectedIds)
         {
             foreach (Transform child in itemContainer)
                 Destroy(child.gameObject);

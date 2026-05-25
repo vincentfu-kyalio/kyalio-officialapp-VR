@@ -3,10 +3,12 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Core;
 using Kyalio.Dev;
-using Kyalio.Models;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using Kyalio.State;
 using Kyalio.Utils;
 using AppPlaybackState = Kyalio.State.PlaybackState;
+using AppState = Kyalio.State.V2.AppState;
 using RenderHeads.Media.AVProVideo;
 using TMPro;
 using UnityEngine;
@@ -23,34 +25,13 @@ namespace Kyalio.Pages
     /// On enter:
     ///   — Hides TabBar and all other pages (UIManager handles page hiding).
     ///   — Prefers a locally downloaded file; falls back to a stream URL from the API.
-    ///   — Seeks to the episode's last saved progress before playing.
+    ///   — Seeks to the episode's last saved progress (from the progress cache) before playing.
     ///   — Syncs watch progress every 10 s while playing.
     ///   — Refreshes the stream URL automatically 60 s before token expiry.
     ///
     /// On exit:
     ///   — Saves final watch progress.
     ///   — Closes media and restores TabBar.
-    ///
-    /// Inspector:
-    ///   _mediaPlayer          — MediaPlayer component (child of the AVPro root object)
-    ///   _tabBarRoot           — root GameObject of the TabBar (hidden during playback)
-    ///   _homeButton           — navigates back (GoBack)
-    ///   _playPauseButton      — play / pause toggle
-    ///   _playPauseIcon        — Image that swaps between _playSprite / _pauseSprite
-    ///   _skipForwardButton    — seek +10 s
-    ///   _skipBackwardButton   — seek -10 s
-    ///   _nextButton           — next episode in playlist
-    ///   _prevButton           — previous episode in playlist
-    ///   _progressSlider       — scrub bar (value 0–1)
-    ///   _currentTimeText      — current position (M:SS or H:MM:SS)
-    ///   _durationText         — total duration
-    ///   _speedButton          — opens the speed panel
-    ///   _speedText            — shows current speed, e.g. "Speed (1x)"
-    ///   _speedPanel           — overlay containing speed toggles
-    ///   _speedPanelCloseButton— closes the speed panel
-    ///   _speed1Toggle         — 1× speed (put all three toggles in a ToggleGroup)
-    ///   _speed125Toggle       — 1.25× speed
-    ///   _speed15Toggle        — 1.5× speed
     /// </summary>
     public class PlayVideoPage : MonoBehaviour, IPageHandler
     {
@@ -98,7 +79,7 @@ namespace Kyalio.Pages
         private bool _preventSliderCallback;
 
         private float _watchSyncTimer;
-        private string _knownServerUpdatedAt;
+        private string _knownProgressUpdatedAt;
 
         private const double SkipSeconds = 10.0;
         private const float WatchSyncIntervalSecs = 10f;
@@ -180,8 +161,8 @@ namespace Kyalio.Pages
             if (_tabBarRoot != null) _tabBarRoot.SetActive(false);
             _speedPanel?.SetActive(false);
 
-            _watchSyncTimer      = 0f;
-            _knownServerUpdatedAt = _currentItem?.ServerUpdatedAt;
+            _watchSyncTimer = 0f;
+            _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
 
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
@@ -218,15 +199,17 @@ namespace Kyalio.Pages
         private async UniTaskVoid LoadAndPlayAsync(
             string projectId, PlaylistItem item, CancellationToken ct)
         {
-            if (string.IsNullOrEmpty(item?.MediaVideoId)) return;
+            if (string.IsNullOrEmpty(item?.VideoId)) return;
+
+            int resumeMs = ProjectCacheRepository.Instance.GetProgressMs(item.VideoId);
 
             // 1. Prefer locally downloaded file
             var localPath = DownloadedVideoState.Instance
-                .GetFilePath(projectId, item.MediaVideoId);
+                .GetFilePath(projectId, item.VideoId);
 
             if (localPath != null)
             {
-                OpenMedia(localPath, item.ProgressMs);
+                OpenMedia(localPath, resumeMs);
                 return;
             }
 
@@ -241,12 +224,12 @@ namespace Kyalio.Pages
             // 3. Fetch stream URL from API
             try
             {
-                var stream = await ServiceLocator.Instance.StreamService
-                    .GetStreamAsync(projectId, item.MediaVideoId, ct);
+                var stream = await ServiceLocator.Instance.V2.Stream
+                    .GetStreamAsync(projectId, item.VideoId, ct);
                 if (ct.IsCancellationRequested) return;
 
                 AppPlaybackState.Instance.SetPlayback(projectId, item, stream);
-                OpenMedia(stream.StreamUrl, item.ProgressMs);
+                OpenMedia(stream.StreamUrl, resumeMs);
 
                 // Schedule a URL refresh 60 s before the token expires
                 _expiryChecker.Stop();
@@ -278,8 +261,8 @@ namespace Kyalio.Pages
                 // Remember current position so we can seek back after re-open
                 double savedPos = _mediaPlayer.Control?.GetCurrentTime() ?? 0;
 
-                var stream = await ServiceLocator.Instance.StreamService
-                    .GetStreamAsync(_projectId, _currentItem.MediaVideoId, ct);
+                var stream = await ServiceLocator.Instance.V2.Stream
+                    .GetStreamAsync(_projectId, _currentItem.VideoId, ct);
                 if (ct.IsCancellationRequested) return;
 
                 _pendingResumeMs = (int)(savedPos * 1000.0);
@@ -327,8 +310,8 @@ namespace Kyalio.Pages
                 // Prefer AVPro's reported duration; fall back to the API value when AVPro
                 // hasn't resolved it yet (returns 0 on some streams at MetaDataReady).
                 double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
-                if (duration <= 0 && _currentItem?.DurationMs > 0)
-                    duration = _currentItem.DurationMs.Value / 1000.0;
+                if (duration <= 0 && _currentItem != null && _currentItem.DurationMs > 0)
+                    duration = _currentItem.DurationMs / 1000.0;
 
                 // If duration is known and the saved position is in the last 5%,
                 // treat the episode as completed and play from the beginning.
@@ -351,8 +334,8 @@ namespace Kyalio.Pages
             if (!state.HasNext) return; // Stay on the last frame; user presses Home
 
             state.AdvancePlaylist();
-            _currentItem          = state.Playlist[state.PlaylistIndex];
-            _knownServerUpdatedAt = _currentItem.ServerUpdatedAt;
+            _currentItem            = state.Playlist[state.PlaylistIndex];
+            _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
             RefreshNavButtons();
 
             if (_cts == null || _cts.IsCancellationRequested)
@@ -416,8 +399,8 @@ namespace Kyalio.Pages
         private void SwitchToPlaylistItem(PlaylistItem item)
         {
             _expiryChecker.Stop();
-            _currentItem          = item;
-            _knownServerUpdatedAt = item.ServerUpdatedAt;
+            _currentItem            = item;
+            _knownProgressUpdatedAt = ProgressUpdatedAt(item);
             RefreshNavButtons();
 
             _cts?.Cancel();
@@ -464,26 +447,31 @@ namespace Kyalio.Pages
         {
             if (string.IsNullOrEmpty(_projectId) || _currentItem == null) return;
 
-            var request = new WatchProgressRequest
+            var request = new UpdateWatchProgressRequest
             {
-                ProgressMs           = (int)AppPlaybackState.Instance.CurrentPositionMs,
-                ProjectId            = _projectId,
-                DeviceType           = DeviceTypeHelper.Get(),
-                KnownServerUpdatedAt = _knownServerUpdatedAt,
+                ProgressMs             = (int)AppPlaybackState.Instance.CurrentPositionMs,
+                ProjectId              = _projectId,
+                KnownProgressUpdatedAt = _knownProgressUpdatedAt,
             };
 
             try
             {
-                var (response, _) = await ServiceLocator.Instance.WatchHistoryService
-                    .UpdateProgressAsync(_currentItem.MediaVideoId, request, ct);
-                if (response != null)
-                    _knownServerUpdatedAt = response.ServerUpdatedAt;
+                var (record, _) = await ServiceLocator.Instance.V2.WatchHistory
+                    .UpdateProgressAsync(_currentItem.VideoId, request, ct);
+                if (record != null)
+                {
+                    _knownProgressUpdatedAt = record.ProgressUpdatedAt;
+                    ProjectCacheRepository.Instance.UpsertProgress(record);
+                }
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[PlayVideoPage] Watch progress sync failed: {e.Message}");
             }
         }
+
+        private static string ProgressUpdatedAt(PlaylistItem item) =>
+            item == null ? null : ProjectCacheRepository.Instance.GetProgressUpdatedAt(item.VideoId);
 
         // ── UI helpers ────────────────────────────────────────────────
 

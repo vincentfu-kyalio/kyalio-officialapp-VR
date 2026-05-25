@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,6 +11,8 @@ namespace Kyalio.Components
         public enum Kind { LatestReleases, Recommended, Category }
 
         public Kind SelectionKind;
+
+        /// <summary>Specialty id (the "Category" kind now maps to a specialty filter).</summary>
         public string CategoryId;
         public string CategoryName;
     }
@@ -43,7 +45,7 @@ namespace Kyalio.Components
 
         // ── Public API ────────────────────────────────────────────────
 
-        public void BuildCategories(List<Category> categories)
+        public void BuildCategories(List<IdNameRef> categories)
         {
             // Remove previously built category buttons
             foreach (Transform child in categoryContainer)

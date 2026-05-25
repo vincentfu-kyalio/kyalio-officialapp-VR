@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Kyalio.Models;
+using Kyalio.Models.V2;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,7 +21,7 @@ namespace Kyalio.Components
         private readonly List<ProjectCard> _pool = new();
         private readonly List<ProjectCard> _active = new();
 
-        public System.Action<SubscribedProject> OnProjectClicked;
+        public System.Action<Project> OnProjectClicked;
 
         /// <summary>Fired when the "See All" button is tapped.</summary>
         public System.Action OnSeeAllClicked;
@@ -39,7 +39,7 @@ namespace Kyalio.Components
             titleText.text = title;
         }
 
-        public void Bind(string title, IReadOnlyList<SubscribedProject> projects)
+        public void Bind(string title, IReadOnlyList<Project> projects)
         {
             titleText.text = title;
             IsBound = true;

@@ -1,15 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Core;
 using Kyalio.Dev;
 using Kyalio.Models;
-using Kyalio.Services;
-using Kyalio.State;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using UnityEngine;
 using UnityEngine.UI;
+using AppState = Kyalio.State.V2.AppState;
 
 namespace Kyalio.Pages
 {
@@ -37,7 +39,7 @@ namespace Kyalio.Pages
         private Tab _activeTab;
         private MyFavoritesPage _activeListPanel;
         private CancellationTokenSource _cts;
-        private List<WatchHistoryProjectItem> _watchHistoryCache;
+        private List<WatchHistoryItem> _watchHistoryCache;
 
         private void Awake()
         {
@@ -121,11 +123,11 @@ namespace Kyalio.Pages
 
             try
             {
-                var response = await ServiceLocator.Instance.WatchHistoryService
-                    .GetProjectHistoryAsync(limit: 20, ct: ct);
+                var response = await ServiceLocator.Instance.V2.WatchHistory
+                    .GetHistoryAsync(mode: WatchHistoryMode.Project, limit: 20, ct: ct);
                 if (ct.IsCancellationRequested) return;
 
-                var fresh = response?.Items ?? new List<WatchHistoryProjectItem>();
+                var fresh = response?.Items ?? new List<WatchHistoryItem>();
 
                 if (!SameProjectOrder(_watchHistoryCache, fresh))
                     BindRecentlyWatched(fresh);
@@ -137,17 +139,17 @@ namespace Kyalio.Pages
             catch (Exception e) { Debug.LogError($"[MyKyalioPage] Watch history load failed: {e.Message}"); }
         }
 
-        private void BindRecentlyWatched(List<WatchHistoryProjectItem> items)
+        private void BindRecentlyWatched(List<WatchHistoryItem> items)
         {
             if (recentlyWatchedPanel == null) return;
             recentlyWatchedPanel.OnProjectClicked = projectId =>
                 UIManager.Instance.GoTo(PageType.ProjectInfo,
-                    new ProjectNavParam { ProjectId = projectId, Source = "direct" });
+                    new ProjectNavParam { ProjectId = projectId, Source = ProjectPageSource.Direct });
             recentlyWatchedPanel.Bind("Recently Watched", items);
         }
 
         private static bool SameProjectOrder(
-            List<WatchHistoryProjectItem> a, List<WatchHistoryProjectItem> b)
+            List<WatchHistoryItem> a, List<WatchHistoryItem> b)
         {
             if (a == null || b == null) return false;
             if (a.Count != b.Count) return false;
@@ -161,25 +163,19 @@ namespace Kyalio.Pages
         [ContextMenu("Load Fake Data")]
         public void LoadFakeData()
         {
-            var fakeHistory = new List<WatchHistoryProjectItem>
+            // Build recent items from the first few seeded projects' first videos.
+            var fakeHistory = new List<WatchHistoryItem>();
+            foreach (var p in ProjectCacheRepository.Instance.All.Take(2))
             {
-                new WatchHistoryProjectItem
+                var firstVideo = p.Playlist != null && p.Playlist.Count > 0 ? p.Playlist[0] : null;
+                if (firstVideo == null) continue;
+                fakeHistory.Add(new WatchHistoryItem
                 {
-                    ProjectId    = "p001",
-                    ProjectName  = "Heart Anatomy VR",
-                    CategoryName = "Cardiology",
-                    LatestEpisode = new WatchHistoryLatestEpisode
-                        { Title = "Introduction", ProgressMs = 900_000, DurationMs = 1_800_000, Ordinal = 1 },
-                },
-                new WatchHistoryProjectItem
-                {
-                    ProjectId    = "p003",
-                    ProjectName  = "Surgical Simulation Module 1",
-                    CategoryName = "Surgery",
-                    LatestEpisode = new WatchHistoryLatestEpisode
-                        { Title = "Episode 1", ProgressMs = 240_000, DurationMs = 2_400_000, Ordinal = 1 },
-                },
-            };
+                    ProjectId  = p.ProjectId,
+                    VideoId    = firstVideo.VideoId,
+                    ProgressMs = firstVideo.DurationMs / 2,
+                });
+            }
 
             // Switch panel visuals without triggering async load
             _activeListPanel?.OnExit();

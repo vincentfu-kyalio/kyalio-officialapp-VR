@@ -1,6 +1,7 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Kyalio.Models;
+using Kyalio.Models.V2;
+using Kyalio.Repositories.V2;
 using Kyalio.Services;
 using Kyalio.State;
 using Kyalio.Utils;
@@ -80,35 +81,34 @@ namespace Kyalio.Components
             _item      = item;
             _projectId = projectId;
 
-            titleText.text       = item.Title ?? item.VideoName ?? $"Episode {item.Ordinal}";
+            titleText.text       = item.Title ?? string.Empty;
             descriptionText.text = item.Description;
 
             if (durationText != null)
-                durationText.text = item.DurationMs.HasValue
-                    ? DurationFormatter.Format((int?)item.DurationMs)
-                    : string.Empty;
+                durationText.text = DurationFormatter.Format((int?)item.DurationMs);
 
             if (sizeText != null)
             {
-                sizeText.gameObject.SetActive(item.SizeBytes.HasValue && item.SizeBytes > 0);
-                if (item.SizeBytes.HasValue && item.SizeBytes > 0)
-                    sizeText.text = FormatSize(item.SizeBytes.Value);
+                sizeText.gameObject.SetActive(item.SizeBytes > 0);
+                if (item.SizeBytes > 0)
+                    sizeText.text = FormatSize(item.SizeBytes);
             }
 
             if (watchProgressSlider != null)
             {
-                bool hasProgress = item.ProgressMs > 0
-                    && item.DurationMs.HasValue && item.DurationMs.Value > 0;
+                int progressMs = ProjectCacheRepository.Instance.GetProgressMs(item.VideoId);
+                bool hasProgress = progressMs > 0 && item.DurationMs > 0;
                 watchProgressSlider.gameObject.SetActive(hasProgress);
                 if (hasProgress)
-                    watchProgressSlider.value = Mathf.Clamp01((float)item.ProgressMs / item.DurationMs.Value);
+                    watchProgressSlider.value = Mathf.Clamp01((float)progressMs / item.DurationMs);
             }
 
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
-            LoadThumbnailAsync(item.ThumbnailUrl, _cts.Token).Forget();
+            if (!string.IsNullOrEmpty(item.ThumbnailUrl))
+                LoadThumbnailAsync(ThumbnailLoader.Resolve(item.ThumbnailUrl), _cts.Token).Forget();
 
             // Subscribe events during Bind to ensure _item / _projectId are already set
             SubscribeDownloadEvents();
@@ -161,14 +161,14 @@ namespace Kyalio.Components
             // HasDownload takes priority: AddRecord is written before OnCompleted fires,
             // at which point _current is still non-null, causing IsDownloading to return a false positive.
             // Confirm the local file exists first.
-            if (DownloadedVideoState.Instance.HasDownload(_projectId, _item.MediaVideoId))
+            if (DownloadedVideoState.Instance.HasDownload(_projectId, _item.VideoId))
                 return DownloadUIState.Downloaded;
 
             var dm = DownloadManager.Instance;
             if (dm != null)
             {
-                if (dm.IsDownloading(_projectId, _item.MediaVideoId)) return DownloadUIState.Downloading;
-                if (dm.IsQueued(_projectId, _item.MediaVideoId))      return DownloadUIState.Queued;
+                if (dm.IsDownloading(_projectId, _item.VideoId)) return DownloadUIState.Downloading;
+                if (dm.IsQueued(_projectId, _item.VideoId))      return DownloadUIState.Queued;
             }
 
             return DownloadUIState.Idle;
@@ -230,12 +230,12 @@ namespace Kyalio.Components
         }
 
         private bool IsFor(string projectId, string videoId) =>
-            projectId == _projectId && videoId == _item?.MediaVideoId;
+            projectId == _projectId && videoId == _item?.VideoId;
 
         // ── Click Handler ─────────────────────────────────────────────
         private async UniTask HandleDownloadClickAsync()
         {
-            Debug.Log($"[PlaylistItemRow] Download button clicked. item={_item?.MediaVideoId} projectId={_projectId}");
+            Debug.Log($"[PlaylistItemRow] Download button clicked. item={_item?.VideoId} projectId={_projectId}");
 
             if (_item == null || string.IsNullOrEmpty(_projectId))
             {
@@ -270,8 +270,7 @@ namespace Kyalio.Components
                 await tcs.Task;
                 if (!confirmed) return;
 
-                DownloadManager.Instance.Cancel(_projectId, _item.MediaVideoId);
-                DownloadedVideoState.Instance.RemoveRecord(_projectId, _item.MediaVideoId);
+                DownloadManager.Instance.Delete(_projectId, _item.VideoId);
                 RefreshDownloadUI();
                 return;
             }
@@ -279,7 +278,7 @@ namespace Kyalio.Components
             if (state == DownloadUIState.Queued)
             {
                 Debug.Log("[PlaylistItemRow] Cancelling queued download");
-                DownloadManager.Instance.Cancel(_projectId, _item.MediaVideoId);
+                DownloadManager.Instance.Cancel(_projectId, _item.VideoId);
                 return;
             }
 
@@ -300,7 +299,7 @@ namespace Kyalio.Components
                 await tcs.Task;
                 if (!confirmed) return;
 
-                DownloadManager.Instance.Cancel(_projectId, _item.MediaVideoId);
+                DownloadManager.Instance.Cancel(_projectId, _item.VideoId);
                 return;
             }
 
@@ -317,8 +316,8 @@ namespace Kyalio.Components
 
                 if (reachability == NetworkReachability.ReachableViaCarrierDataNetwork)
                 {
-                    var sizeStr = _item.SizeBytes.HasValue
-                        ? FormatSize(_item.SizeBytes.Value)
+                    var sizeStr = _item.SizeBytes > 0
+                        ? FormatSize(_item.SizeBytes)
                         : "unknown size";
                     bool confirmed = false;
                     var tcs = new UniTaskCompletionSource();
@@ -332,8 +331,8 @@ namespace Kyalio.Components
                     if (!confirmed) return;
                 }
 
-                Debug.Log($"[PlaylistItemRow] Enqueuing download: {_projectId}/{_item.MediaVideoId}");
-                DownloadManager.Instance.Enqueue(_projectId, _item.MediaVideoId, _item.SizeBytes ?? 0);
+                Debug.Log($"[PlaylistItemRow] Enqueuing download: {_projectId}/{_item.VideoId}");
+                DownloadManager.Instance.Enqueue(_projectId, _item.VideoId, _item.SizeBytes);
             }
         }
 

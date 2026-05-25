@@ -86,7 +86,7 @@ namespace Kyalio.Pages
 
             try
             {
-                await ServiceLocator.Instance.AuthService.VerifyPairCodeAsync(code, ct);
+                await ServiceLocator.Instance.V2.Auth.VerifyPairAsync(code, ct);
 
                 // 204 — pairing successful
                 if (!ct.IsCancellationRequested)
