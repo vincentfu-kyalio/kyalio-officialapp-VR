@@ -43,5 +43,23 @@ namespace Kyalio.Core
             // 3. Back to the pairing screen, clearing navigation history.
             UIManager.Instance?.SwitchPage(PageType.Login);
         }
+
+        /// <summary>
+        /// Handle access-token expiry (401). Skips the server-side logout call (the bearer is
+        /// already invalid) and drops local session state before returning to the pairing
+        /// screen. Quest has no refresh-token flow, so expiry always means re-pair.
+        /// </summary>
+        public static void ExpireToLogin()
+        {
+            Debug.Log("[Session] Access token expired — returning to login.");
+
+            ServiceLocator.Instance.ApiClient.ClearToken();
+            AppState.Reset();
+            UserLocalState.Reset();
+            PlaybackState.Reset();
+            ThumbnailLoader.ClearCache();
+
+            UIManager.Instance?.SwitchPage(PageType.Login);
+        }
     }
 }

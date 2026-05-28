@@ -46,6 +46,11 @@ namespace Kyalio.Core
             DevFlags.UseFakeData = _useFakeData;
         }
 
+        private void OnEnable()  => ApiClient.OnUnauthorized += OnUnauthorized;
+        private void OnDisable() => ApiClient.OnUnauthorized -= OnUnauthorized;
+
+        private static void OnUnauthorized() => Session.ExpireToLogin();
+
         private void Start()
         {
             if (_useFakeData)

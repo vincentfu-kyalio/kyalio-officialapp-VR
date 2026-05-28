@@ -25,9 +25,20 @@ namespace Kyalio.Services
         /// </summary>
         public static event Action<ForceUpdateInfo> OnForceUpdateRequired;
 
+        /// <summary>
+        /// Fires when any endpoint returns 401 (missing / invalid / expired bearer). Subscribers
+        /// should drop local session state and return the user to the login / pairing screen.
+        /// Quest has no refresh-token flow — expiry always means re-pair. The originating call
+        /// still throws <see cref="ApiException"/>; this is a side-channel notification. Fires
+        /// at most once per access token: the flag is reset on <see cref="SetToken"/> so the
+        /// next expiry after a successful re-login can fire again.
+        /// </summary>
+        public static event Action OnUnauthorized;
+
         private readonly string _baseUrl;
         private readonly string _appVersion;
         private string _token;
+        private bool _unauthorizedFired;
 
         public ApiClient(string baseUrl, string appVersion = null)
         {
@@ -35,7 +46,11 @@ namespace Kyalio.Services
             _appVersion = appVersion;
         }
 
-        public void SetToken(string token) => _token = token;
+        public void SetToken(string token)
+        {
+            _token = token;
+            _unauthorizedFired = false;
+        }
         public void ClearToken() => _token = null;
         public string Token => _token;
         public string AppVersion => _appVersion;
@@ -125,6 +140,7 @@ namespace Kyalio.Services
                 else
                     Debug.LogWarning($"[ApiClient] SSE {url} \u2192 {code}\n{body}");
                 HandleForceUpdate(code, body);
+                HandleUnauthorized(code);
                 throw new ApiException(code, body);
             }
 
@@ -185,6 +201,7 @@ namespace Kyalio.Services
                 else
                     Debug.LogWarning($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
                 HandleForceUpdate(code, body);
+                HandleUnauthorized(code);
                 throw new ApiException(code, body);
             }
 
@@ -251,6 +268,7 @@ namespace Kyalio.Services
                 else
                     Debug.LogWarning($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
                 HandleForceUpdate(code, body);
+                HandleUnauthorized(code);
                 throw new ApiException(code, body);
             }
 
@@ -272,6 +290,14 @@ namespace Kyalio.Services
                 Debug.LogWarning($"[ApiClient] 426 body parse failed: {e.Message}\n{body}");
             }
             OnForceUpdateRequired.Invoke(info);
+        }
+
+        private void HandleUnauthorized(int statusCode)
+        {
+            if (statusCode != 401) return;
+            if (_unauthorizedFired) return;
+            _unauthorizedFired = true;
+            OnUnauthorized?.Invoke();
         }
     }
 
