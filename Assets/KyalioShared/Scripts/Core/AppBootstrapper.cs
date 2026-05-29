@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Dev;
 using Kyalio.Services;
 using UnityEngine;
+using UnityEngine.XR;
 
 namespace Kyalio.Core
 {
@@ -53,6 +55,8 @@ namespace Kyalio.Core
 
         private void Start()
         {
+            ApplyFoveatedRenderingAsync().Forget();
+
             if (_useFakeData)
             {
                 FakeDataSeeder.Seed();
@@ -90,6 +94,33 @@ namespace Kyalio.Core
             }
 
             UIManager.Instance.GoTo(PageType.Login);
+        }
+
+        /// <summary>
+        /// Enables fixed foveated rendering (FFR) at full strength once the XR display
+        /// subsystem is live. FFR lowers the shading rate toward the periphery of each
+        /// eye — detail the lens distortion already blurs — reclaiming GPU budget so head
+        /// movement holds native refresh instead of dropping into compositor reprojection,
+        /// which is what made the world-space UI judder when turning the head.
+        /// The subsystem may not be running on the first frame, so we poll a few seconds.
+        /// </summary>
+        private static async UniTaskVoid ApplyFoveatedRenderingAsync()
+        {
+            var displays = new List<XRDisplaySubsystem>();
+            for (var attempt = 0; attempt < 180; attempt++)
+            {
+                SubsystemManager.GetSubsystems(displays);
+                var display = displays.Find(d => d.running);
+                if (display != null)
+                {
+                    // 1 = strongest periphery reduction. Fixed (no gaze) — no eye tracking.
+                    display.foveatedRenderingLevel = 1f;
+                    display.foveatedRenderingFlags = XRDisplaySubsystem.FoveatedRenderingFlags.None;
+                    return;
+                }
+                await UniTask.Yield();
+            }
+            Debug.LogWarning("[AppBootstrapper] XR display subsystem not running; FFR not applied.");
         }
 
         private void ShowForceUpdate(string storeUrl)
