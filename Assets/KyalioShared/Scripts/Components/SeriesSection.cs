@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Kyalio.Models.V2;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Kyalio.Components
 {
@@ -10,13 +11,14 @@ namespace Kyalio.Components
     ///   - projects mode: Bind(projects)        — shows ProjectCards
     ///   - episodes mode: BindEpisodes(episodes) — shows EpisodeCards
     /// Title and navigation are owned by SeriesPage; this component only manages card pooling.
-    /// Inspector: seriesContent, projectCardPrefab, episodeCardPrefab
+    /// Inspector: seriesContent, projectCardPrefab, episodeCardPrefab, scrollRect
     /// </summary>
     public class SeriesSection : MonoBehaviour
     {
         [SerializeField] private Transform seriesContent;
         [SerializeField] private ProjectCard projectCardPrefab;
         [SerializeField] private EpisodeCard episodeCardPrefab;
+        [SerializeField] private ScrollRect scrollRect;
 
         private readonly List<ProjectCard> _projectPool  = new();
         private readonly List<ProjectCard> _projectActive = new();
@@ -44,6 +46,8 @@ namespace Kyalio.Components
                 card.OnClicked = proj => OnProjectClicked?.Invoke(proj);
                 card.Bind(p);
             }
+
+            RefreshLayout();
         }
 
         /// <summary>Episodes mode — shows an EpisodeCard per (project, video, progress).</summary>
@@ -60,12 +64,29 @@ namespace Kyalio.Components
                 card.OnClicked = (pid, item) => OnEpisodeClicked?.Invoke(pid, item);
                 card.Bind(ep.projectId, ep.item, ep.progressMs);
             }
+
+            RefreshLayout();
         }
 
         public void Clear()
         {
             ReturnAllProjects();
             ReturnAllEpisodes();
+        }
+
+        /// <summary>
+        /// Forces the ScrollRect content to rebuild after its cards change and
+        /// resets the scroll position to the top. seriesContent is nested inside
+        /// the ScrollRect content, so rebuilding the outer content is what
+        /// propagates the new size up to the ScrollRect — rebuilding only the
+        /// inner container leaves the scroll view blank or clipped.
+        /// </summary>
+        private void RefreshLayout()
+        {
+            if (scrollRect == null) return;
+            if (scrollRect.content != null)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
+            scrollRect.verticalNormalizedPosition = 1f;
         }
 
         // ── Project card pool ─────────────────────────────────────────
@@ -83,6 +104,7 @@ namespace Kyalio.Components
                 card = Instantiate(projectCardPrefab, seriesContent);
             }
             card.gameObject.SetActive(true);
+            card.transform.SetAsLastSibling();
             _projectActive.Add(card);
             return card;
         }
@@ -113,6 +135,7 @@ namespace Kyalio.Components
                 card = Instantiate(episodeCardPrefab, seriesContent);
             }
             card.gameObject.SetActive(true);
+            card.transform.SetAsLastSibling();
             _episodeActive.Add(card);
             return card;
         }
