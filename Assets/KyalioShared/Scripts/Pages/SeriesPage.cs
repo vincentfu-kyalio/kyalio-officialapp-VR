@@ -68,7 +68,8 @@ namespace Kyalio.Pages
                 {
                     PlaybackState.Instance.ClearPlaylist();
                     UIManager.Instance.GoTo(PageType.PlayVideo,
-                        new ValueTuple<string, PlaylistItem>(projectId, item));
+                        new ValueTuple<string, PlaylistItem>(projectId, item),
+                        fade: true);
                 };
 
                 var episodes = new List<(string, PlaylistItem, int)>();

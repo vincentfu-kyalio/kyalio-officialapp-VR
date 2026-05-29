@@ -237,7 +237,8 @@ namespace Kyalio.Pages
                     int idx = playlist.IndexOf(playlistItem);
                     PlaybackState.Instance.SetPlaylist(playlist, idx >= 0 ? idx : 0);
                     UIManager.Instance.GoTo(PageType.PlayVideo,
-                        new System.ValueTuple<string, PlaylistItem>(_projectId, playlistItem));
+                        new System.ValueTuple<string, PlaylistItem>(_projectId, playlistItem),
+                        fade: true);
                 };
                 row.OnConfirmRequested = (msg, yes, no) => PopupManager.Instance.ShowYesNo(msg, yes, no);
                 row.Bind(item, _projectId);
@@ -486,7 +487,8 @@ namespace Kyalio.Pages
             int startIndex = FindResumeIndex(playlist);
             PlaybackState.Instance.SetPlaylist(playlist, startIndex);
             UIManager.Instance.GoTo(PageType.PlayVideo,
-                new System.ValueTuple<string, PlaylistItem>(_projectId, playlist[startIndex]));
+                new System.ValueTuple<string, PlaylistItem>(_projectId, playlist[startIndex]),
+                fade: true);
         }
 
         /// <summary>

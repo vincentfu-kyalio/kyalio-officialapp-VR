@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kyalio.Components;
 using Kyalio.Core;
 using Kyalio.Dev;
 using Kyalio.Models.V2;
@@ -161,6 +162,10 @@ namespace Kyalio.Pages
             if (_tabBarRoot != null) _tabBarRoot.SetActive(false);
             _speedPanel?.SetActive(false);
 
+            // 進入播放頁時隱藏 3D 場景並把相機天空盒改純色。
+            // 切頁的 fade 由 UIManager 負責（GoTo(..., fade: true)），這裡即時切換即可。
+            CinemaModeController.Instance?.Enter(fade: false);
+
             _watchSyncTimer = 0f;
             _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
 
@@ -186,6 +191,10 @@ namespace Kyalio.Pages
                 SyncWatchProgressAsync(CancellationToken.None).Forget();
 
             AppState.Instance.MarkWatchHistoryDirty();
+
+            // 回到主頁面時還原 3D 場景與天空盒（切頁 fade 由 UIManager.GoBack(fade: true) 負責，
+            // 故即時切換；影片若已自然結束則已還原，這裡會被守門略過）
+            CinemaModeController.Instance?.Exit(fade: false);
 
             _mediaPlayer?.Control?.Pause();
             _mediaPlayer?.CloseMedia();
@@ -331,7 +340,13 @@ namespace Kyalio.Pages
                 SyncWatchProgressAsync(CancellationToken.None).Forget();
 
             var state = AppPlaybackState.Instance;
-            if (!state.HasNext) return; // Stay on the last frame; user presses Home
+            if (!state.HasNext)
+            {
+                // 影片播放結束（且無下一支）：仍停在播放頁，不是切頁，
+                // 故由本元件自帶 fade out/in 還原 3D 場景與天空盒
+                CinemaModeController.Instance?.Exit(fade: true);
+                return; // Stay on the last frame; user presses Home
+            }
 
             state.AdvancePlaylist();
             _currentItem            = state.Playlist[state.PlaylistIndex];
@@ -346,7 +361,7 @@ namespace Kyalio.Pages
 
         // ── Playback controls ─────────────────────────────────────────
 
-        private void OnHomeClicked() => UIManager.Instance.GoBack();
+        private void OnHomeClicked() => UIManager.Instance.GoBack(fade: true);
 
         private void OnPlayPauseClicked()
         {

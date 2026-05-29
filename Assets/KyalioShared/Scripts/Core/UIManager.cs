@@ -78,8 +78,20 @@ namespace Kyalio.Core
         /// <summary>
         /// Navigate to a page, pushing the current page onto the history stack.
         /// Pass null for param when no data needs to be forwarded.
+        /// When fade is true (and a SceneFader exists), the page swap is hidden behind a
+        /// fade out / fade in so the old and new pages never flicker against each other.
         /// </summary>
-        public void GoTo(PageType pageType, object param = null)
+        public void GoTo(PageType pageType, object param = null, bool fade = false)
+        {
+            if (fade && SceneFader.Instance != null)
+            {
+                SceneFader.Instance.FadeOutThenIn(() => GoToImmediate(pageType, param));
+                return;
+            }
+            GoToImmediate(pageType, param);
+        }
+
+        private void GoToImmediate(PageType pageType, object param)
         {
             if (_currentPage.HasValue)
             {
@@ -95,8 +107,10 @@ namespace Kyalio.Core
         /// Return to the previous page. The previous page's OnEnter is called with null
         /// so pages can distinguish a GoBack re-entry from a fresh navigation.
         /// Does nothing if there is no history.
+        /// When fade is true (and a SceneFader exists), the page swap is hidden behind a
+        /// fade out / fade in.
         /// </summary>
-        public void GoBack()
+        public void GoBack(bool fade = false)
         {
             if (_history.Count == 0)
             {
@@ -104,6 +118,16 @@ namespace Kyalio.Core
                 return;
             }
 
+            if (fade && SceneFader.Instance != null)
+            {
+                SceneFader.Instance.FadeOutThenIn(GoBackImmediate);
+                return;
+            }
+            GoBackImmediate();
+        }
+
+        private void GoBackImmediate()
+        {
             if (_currentPage.HasValue)
                 ExitPage(_currentPage.Value);
 
