@@ -35954,6 +35954,7 @@ GameObject:
   - component: {fileID: 158920098475643489}
   - component: {fileID: 2683491887866614223}
   - component: {fileID: 5494504725129022357}
+  - component: {fileID: 5494504725129022359}
   - component: {fileID: 5494504725129022358}
   m_Layer: 5
   m_Name: vr_video_controll_ui
@@ -58421,7 +58422,19 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &5494504725129022358
+--- !u!225 &5494504725129022358
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2632613788384957044}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
+--- !u!114 &5494504725129022359
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -58455,6 +58468,11 @@ MonoBehaviour:
   _speed1Toggle: {fileID: 7668022972830202224}
   _speed125Toggle: {fileID: 3352223403181512769}
   _speed15Toggle: {fileID: 6276653146151049335}
+  _controlsGroup: {fileID: 5494504725129022358}
+  _controlsHideDelay: 5
+  _showControlsActions:
+  - {fileID: 83097790271614945, guid: c348712bda248c246b8c49b3db54643f, type: 3}
+  - {fileID: -5982496924579745919, guid: c348712bda248c246b8c49b3db54643f, type: 3}
 --- !u!114 &5495732363922025778
 MonoBehaviour:
   m_ObjectHideFlags: 0

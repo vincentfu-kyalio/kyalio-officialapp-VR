@@ -13,6 +13,7 @@ using AppState = Kyalio.State.V2.AppState;
 using RenderHeads.Media.AVProVideo;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Kyalio.Pages
@@ -68,6 +69,16 @@ namespace Kyalio.Pages
         [SerializeField] private Toggle _speed125Toggle;
         [SerializeField] private Toggle _speed15Toggle;
 
+        [Header("Controls Auto-Hide")]
+        [Tooltip("CanvasGroup on vr_video_controll_ui. Toggled via alpha/interactable so the " +
+                 "page handler (on the same object) keeps running while the controls are hidden.")]
+        [SerializeField] private CanvasGroup _controlsGroup;
+        [Tooltip("Seconds of inactivity (while playing) before the controls auto-hide.")]
+        [SerializeField] private float _controlsHideDelay = 5f;
+        [Tooltip("Trigger actions that re-summon the controls — drag the Activate action " +
+                 "from XRI Left Interaction and XRI Right Interaction (XRI Default Input Actions).")]
+        [SerializeField] private InputActionReference[] _showControlsActions;
+
         // ── Runtime ───────────────────────────────────────────────────
 
         private string _projectId;
@@ -81,6 +92,9 @@ namespace Kyalio.Pages
 
         private float _watchSyncTimer;
         private string _knownProgressUpdatedAt;
+
+        // Trigger press summons the controls; idle timer hides them again.
+        private float _controlsIdleTimer;
 
         private const double SkipSeconds = 10.0;
         private const float WatchSyncIntervalSecs = 10f;
@@ -136,6 +150,15 @@ namespace Kyalio.Pages
             AppPlaybackState.Instance.CurrentPositionMs = (long)(current * 1000.0);
             RefreshPlayPauseButton();
 
+            // Auto-hide the controls after inactivity, but only while actually
+            // playing — keep them up while paused so the user can act.
+            if (ControlsVisible && _mediaPlayer.Control.IsPlaying())
+            {
+                _controlsIdleTimer += Time.deltaTime;
+                if (_controlsIdleTimer >= _controlsHideDelay)
+                    HideControls();
+            }
+
             // Periodic watch-history sync while playing
             if (_mediaPlayer.Control.IsPlaying() && !DevFlags.UseFakeData)
             {
@@ -162,6 +185,11 @@ namespace Kyalio.Pages
             if (_tabBarRoot != null) _tabBarRoot.SetActive(false);
             _speedPanel?.SetActive(false);
 
+            // Controls start visible; the idle timer (counted only while playing)
+            // hides them ~5 s after playback begins.
+            ShowControls();
+            SubscribeShowControls();
+
             // 進入播放頁時隱藏 3D 場景並把相機天空盒改純色。
             // 切頁的 fade 由 UIManager 負責（GoTo(..., fade: true)），這裡即時切換即可。
             CinemaModeController.Instance?.Enter(fade: false);
@@ -182,6 +210,7 @@ namespace Kyalio.Pages
 
         public void OnExit()
         {
+            UnsubscribeShowControls();
             _expiryChecker.Stop();
             _cts?.Cancel();
 
@@ -345,6 +374,7 @@ namespace Kyalio.Pages
                 // 影片播放結束（且無下一支）：仍停在播放頁，不是切頁，
                 // 故由本元件自帶 fade out/in 還原 3D 場景與天空盒
                 CinemaModeController.Instance?.Exit(fade: true);
+                ShowControls(); // surface controls so the user can navigate
                 return; // Stay on the last frame; user presses Home
             }
 
@@ -426,6 +456,8 @@ namespace Kyalio.Pages
         private void OnSliderChanged(float value)
         {
             if (_preventSliderCallback || _mediaPlayer?.Control == null) return;
+            // Scrubbing is activity — keep controls alive through a long drag.
+            _controlsIdleTimer = 0f;
             double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
             if (duration > 0)
                 _mediaPlayer.Control.Seek(value * duration);
@@ -487,6 +519,60 @@ namespace Kyalio.Pages
 
         private static string ProgressUpdatedAt(PlaylistItem item) =>
             item == null ? null : ProjectCacheRepository.Instance.GetProgressUpdatedAt(item.VideoId);
+
+        // ── Controls visibility ───────────────────────────────────────
+
+        private bool ControlsVisible => _controlsGroup != null && _controlsGroup.alpha > 0f;
+
+        private void OnShowControlsInput(InputAction.CallbackContext _) => ShowControls();
+
+        // The Activate actions are shared with XRI, so we only attach/detach our
+        // callback here — never Disable() them, or the trigger would stop working
+        // app-wide once this page is left. We Enable() defensively in case the rig
+        // hasn't, which is idempotent if it already has.
+        private void SubscribeShowControls()
+        {
+            if (_showControlsActions == null) return;
+            foreach (var reference in _showControlsActions)
+            {
+                var action = reference != null ? reference.action : null;
+                if (action == null) continue;
+                action.performed += OnShowControlsInput;
+                action.Enable();
+            }
+        }
+
+        private void UnsubscribeShowControls()
+        {
+            if (_showControlsActions == null) return;
+            foreach (var reference in _showControlsActions)
+            {
+                var action = reference != null ? reference.action : null;
+                if (action == null) continue;
+                action.performed -= OnShowControlsInput;
+            }
+        }
+
+        /// <summary>Shows the controls and restarts the inactivity countdown.</summary>
+        private void ShowControls()
+        {
+            _controlsIdleTimer = 0f;
+            if (_controlsGroup == null) return;
+            _controlsGroup.alpha = 1f;
+            _controlsGroup.interactable = true;
+            _controlsGroup.blocksRaycasts = true;
+        }
+
+        /// <summary>Hides the controls (and the speed sub-panel) without disabling the
+        /// GameObject, so this handler's Update and input callbacks keep running.</summary>
+        private void HideControls()
+        {
+            _speedPanel?.SetActive(false);
+            if (_controlsGroup == null) return;
+            _controlsGroup.alpha = 0f;
+            _controlsGroup.interactable = false;
+            _controlsGroup.blocksRaycasts = false;
+        }
 
         // ── UI helpers ────────────────────────────────────────────────
 
