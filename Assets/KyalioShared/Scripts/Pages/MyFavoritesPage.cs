@@ -169,6 +169,11 @@ namespace Kyalio.Pages
 
         private void LoadDownloads()
         {
+            // Drop records whose file is gone so the count and list reflect what is
+            // actually downloaded (otherwise an orphan record shows e.g. "1 video" with
+            // an empty list).
+            DownloadedVideoState.Instance.PruneMissingFiles();
+
             var records = DownloadedVideoState.Instance.Records;
             var repo    = ProjectCacheRepository.Instance;
 

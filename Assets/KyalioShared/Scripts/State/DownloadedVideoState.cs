@@ -105,6 +105,22 @@ namespace Kyalio.State
             OnRecordsChanged?.Invoke();
         }
 
+        /// <summary>
+        /// Removes records whose backing file no longer exists on disk (orphans left by
+        /// an externally deleted/cleared file). Saves and notifies only when something changed.
+        /// Returns true if any record was pruned.
+        /// </summary>
+        public bool PruneMissingFiles()
+        {
+            int before = Records.Count;
+            Records.RemoveAll(r => string.IsNullOrEmpty(r.FilePath) || !File.Exists(r.FilePath));
+            if (Records.Count == before) return false;
+
+            Save();
+            OnRecordsChanged?.Invoke();
+            return true;
+        }
+
         public void Save()
         {
             try
