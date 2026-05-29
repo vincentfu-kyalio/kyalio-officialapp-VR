@@ -24068,6 +24068,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2378107857094142113}
   - component: {fileID: 4358315632503194550}
+  - component: {fileID: 4358315632503194551}
   m_Layer: 5
   m_Name: grid_layout
   m_TagString: Untagged
@@ -24188,7 +24189,7 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 2200003038051704105}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.24919808}
+  m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
@@ -25471,7 +25472,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: -0.00006247312}
-  m_SizeDelta: {x: 0, y: 928.1}
+  m_SizeDelta: {x: 0, y: 278}
   m_Pivot: {x: 0, y: 1}
 --- !u!224 &1417957292183200723
 RectTransform:
@@ -26886,8 +26887,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 550.1, y: -430.44998}
-  m_SizeDelta: {x: 990.2, y: 650.1}
+  m_AnchoredPosition: {x: 550.1, y: -222.9}
+  m_SizeDelta: {x: 990.2, y: 235}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1566608997289395706
 GameObject:
@@ -31523,7 +31524,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: -0.00055313733}
-  m_SizeDelta: {x: 0, y: 1005.5}
+  m_SizeDelta: {x: 0, y: 590.4}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &2117569124533178608
 GameObject:
@@ -33857,8 +33858,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 550.1, y: -441.84998}
-  m_SizeDelta: {x: 990.2, y: 650.1}
+  m_AnchoredPosition: {x: 550.1, y: -116.8}
+  m_SizeDelta: {x: 990.2, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &2383684423351939010
 CanvasRenderer:
@@ -36340,6 +36341,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7830524028763700977}
   - component: {fileID: 7743690459225236232}
+  - component: {fileID: 7830524028763700978}
   m_Layer: 5
   m_Name: grid_layout
   m_TagString: Untagged
@@ -40050,7 +40052,7 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1141622265412106106}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.2675358}
+  m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
@@ -41313,7 +41315,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 1.3}
+  m_AnchoredPosition: {x: 0, y: 1.165}
   m_SizeDelta: {x: 7680, y: 4320}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &3322924131524110808
@@ -45353,7 +45355,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: -0.00055313733}
-  m_SizeDelta: {x: 0, y: 1016.8999}
+  m_SizeDelta: {x: 0, y: 366.8}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &3886679889328290898
 MonoBehaviour:
@@ -46835,8 +46837,8 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 6735699332124699043}
   m_HandleRect: {fileID: 3119947949036757852}
   m_Direction: 2
-  m_Value: 1.0000002
-  m_Size: 0.7324642
+  m_Value: 1
+  m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -48023,7 +48025,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: -0.00055313733}
-  m_SizeDelta: {x: 0, y: 1050.61}
+  m_SizeDelta: {x: 0, y: 400.51}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &4180245681155792126
 CanvasRenderer:
@@ -49348,6 +49350,20 @@ MonoBehaviour:
   m_Spacing: {x: 70, y: 55}
   m_Constraint: 0
   m_ConstraintCount: 2
+--- !u!114 &4358315632503194551
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267257516132574935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3245ec927659c4140ac4f8d17403cc18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ContentSizeFitter
+  m_HorizontalFit: 0
+  m_VerticalFit: 2
 --- !u!114 &4359682886433518658
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -50655,7 +50671,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &4508818319059204005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -65200,8 +65216,8 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 8278970103354038473}
   m_HandleRect: {fileID: 7232536672902288824}
   m_Direction: 2
-  m_Value: 1.0000021
-  m_Size: 0.748107
+  m_Value: 1
+  m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -67424,8 +67440,8 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 4771752121655659026}
   m_HandleRect: {fileID: 1284338793492964636}
   m_Direction: 2
-  m_Value: 1.0000024
-  m_Size: 0.7508019
+  m_Value: 1
+  m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -69755,8 +69771,8 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 2353829918464312271}
   m_HandleRect: {fileID: 7615022230599919685}
   m_Direction: 2
-  m_Value: 1.0000018
-  m_Size: 0.756539
+  m_Value: 1
+  m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -69953,6 +69969,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1563109242551025396}
   - component: {fileID: 2833233598070959020}
+  - component: {fileID: 6799491945823346742}
   m_Layer: 5
   m_Name: grid_layout
   m_TagString: Untagged
@@ -69960,6 +69977,20 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &6799491945823346742
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6799491945823346741}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3245ec927659c4140ac4f8d17403cc18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ContentSizeFitter
+  m_HorizontalFit: 0
+  m_VerticalFit: 2
 --- !u!1 &6802449346277742734
 GameObject:
   m_ObjectHideFlags: 0
@@ -73430,7 +73461,7 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 7114437409695431806}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.25189298}
+  m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
@@ -76587,7 +76618,7 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1495959936840276359}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.24346101}
+  m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
@@ -76898,8 +76929,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 560.1, y: -475.56}
-  m_SizeDelta: {x: 990.2, y: 650.1}
+  m_AnchoredPosition: {x: 560.1, y: -150.51}
+  m_SizeDelta: {x: 990.2, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &7641409412946305329
 GameObject:
@@ -78476,9 +78507,23 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 550.1, y: -353.05}
-  m_SizeDelta: {x: 990.2, y: 650.1}
+  m_AnchoredPosition: {x: 550.1, y: -28}
+  m_SizeDelta: {x: 990.2, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &7830524028763700978
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2685092948144026995}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3245ec927659c4140ac4f8d17403cc18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ContentSizeFitter
+  m_HorizontalFit: 0
+  m_VerticalFit: 2
 --- !u!1 &7833358394229949407
 GameObject:
   m_ObjectHideFlags: 0
@@ -80563,6 +80608,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7637939053817306836}
   - component: {fileID: 7498596680136147816}
+  - component: {fileID: 8084855821466246036}
   m_Layer: 5
   m_Name: GridLayout
   m_TagString: Untagged
@@ -80570,6 +80616,20 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &8084855821466246036
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8084855821466246035}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3245ec927659c4140ac4f8d17403cc18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ContentSizeFitter
+  m_HorizontalFit: 0
+  m_VerticalFit: 2
 --- !u!224 &8087767020060207441
 RectTransform:
   m_ObjectHideFlags: 0
