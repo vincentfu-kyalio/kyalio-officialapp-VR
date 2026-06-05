@@ -8,10 +8,10 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/App.unity
     guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 0
-    path: Assets/Samples/XR Interaction Toolkit/3.3.1/Starter Assets/DemoScene.unity
-    guid: 319dafa5c80f29f428dc1e0d03f04177
   m_configObjects:
+    com.unity.adaptivePerformance.basic.provider_settings: {fileID: 11400000, guid: cf27e181c7ed3b04c9b0b0581c3d57e9, type: 2}
+    com.unity.adaptiveperformance.loader_settings: {fileID: 11400000, guid: 69140905740a57640bf7f3c37f260615, type: 2}
+    com.unity.adaptiveperformance.simulator.provider_settings: {fileID: 11400000, guid: d22a0beeeb8f05442883ed84de0cc9e6, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: c348712bda248c246b8c49b3db54643f, type: 3}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: cbed265024ae343499d4468971608bfc, type: 2}
     com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 0a007183040b25d42865515d25060d7c, type: 2}
