@@ -40,6 +40,9 @@ namespace Kyalio.Core
         [Header("Dev")]
         [SerializeField] private bool _useFakeData;
         [SerializeField] private PageType _devStartPage = PageType.Home;
+        [Tooltip("TabBar root GameObject — must be the same one assigned on LoginPage. " +
+                 "Activated in fake-data mode since the login flow that normally enables it is skipped.")]
+        [SerializeField] private GameObject _tabBarRoot;
 
         private void Awake()
         {
@@ -60,7 +63,15 @@ namespace Kyalio.Core
             if (_useFakeData)
             {
                 FakeDataSeeder.Seed();
-                UIManager.Instance.GoTo(_devStartPage);
+
+                // The login flow normally enables the TabBar and selects the tab. Fake mode
+                // skips login, so replicate it here — the TabBar root starts inactive, which
+                // also means TabBar.Awake (and TabBar.Instance) only runs after SetActive(true).
+                if (_tabBarRoot != null)
+                    _tabBarRoot.SetActive(true);
+
+                UIManager.Instance.SwitchPage(_devStartPage);
+                TabBar.Instance?.SelectTab(_devStartPage);
                 return;
             }
 
