@@ -117,6 +117,11 @@ namespace Kyalio.Pages
         private bool _leftPinching;
         private bool _rightPinching;
 
+        // Controller trigger → summon controls. Built in code (no Inspector wiring)
+        // and fed by OpenXR through the Input System — OVRInput's controller side
+        // doesn't fire reliably in this OpenXR rig, but OVRHand (pinch) does.
+        private InputAction _triggerShowAction;
+
         private const double SkipSeconds = 10.0;
         private const float WatchSyncIntervalSecs = 10f;
 
@@ -146,12 +151,25 @@ namespace Kyalio.Pages
                 _mediaPlayer.Events.AddListener(OnMediaPlayerEvent);
 
             _overlayCanvas = GetComponentInParent<OVROverlayCanvas>(includeInactive: true);
+
+            // Any XR controller's analog trigger (Button action fires once per press
+            // past the default threshold). Matches both controllers via the generic
+            // <XRController> path, so no per-hand binding is required.
+            _triggerShowAction = new InputAction("ShowControlsTrigger", InputActionType.Button);
+            _triggerShowAction.AddBinding("<XRController>/trigger");
+            _triggerShowAction.performed += OnShowControlsInput;
         }
 
         private void OnDestroy()
         {
             if (_mediaPlayer != null)
                 _mediaPlayer.Events.RemoveListener(OnMediaPlayerEvent);
+
+            if (_triggerShowAction != null)
+            {
+                _triggerShowAction.performed -= OnShowControlsInput;
+                _triggerShowAction.Dispose();
+            }
         }
 
         private void Update()
@@ -603,9 +621,11 @@ namespace Kyalio.Pages
         // hasn't, which is idempotent if it already has.
         private void SubscribeShowControls()
         {
-            // Enable OVRInput / OVRHand polling for the lifetime of the page.
+            // Enable OVRHand pinch polling + the controller trigger action for the
+            // lifetime of the page.
             _showControlsInputActive = true;
             _leftPinching = _rightPinching = false;
+            _triggerShowAction?.Enable();
 
             if (_showControlsActions == null) return;
             foreach (var reference in _showControlsActions)
@@ -620,6 +640,7 @@ namespace Kyalio.Pages
         private void UnsubscribeShowControls()
         {
             _showControlsInputActive = false;
+            _triggerShowAction?.Disable();
 
             if (_showControlsActions == null) return;
             foreach (var reference in _showControlsActions)
