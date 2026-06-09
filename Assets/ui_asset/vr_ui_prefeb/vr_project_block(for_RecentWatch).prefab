@@ -611,7 +611,7 @@ MonoBehaviour:
   programLogo: {fileID: 5112159636156539777}
   titleText: {fileID: 622518191371040418}
   categoryText: {fileID: 2251819548466595358}
-  episodeText: {fileID: 0}
+  episodeText: {fileID: 5284278026373501434}
   progressBar: {fileID: 2124158425279290818}
   playlistSign: {fileID: 7830764450941820699}
   button: {fileID: 1367329867092248083}

@@ -52,7 +52,7 @@ namespace Kyalio.Components
             if (episodeText != null)
             {
                 int idx = repo.GetVideoIndex(item.ProjectId, item.VideoId);
-                episodeText.text = idx >= 0 ? (idx + 1).ToString() : string.Empty;
+                episodeText.text = idx >= 0 ? $"<size=90%>ep</size>{idx + 1}" : string.Empty;
             }
 
             if (progressBar != null)

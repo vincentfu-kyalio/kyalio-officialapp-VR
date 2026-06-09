@@ -79,7 +79,22 @@ namespace Kyalio.Pages
                  "from XRI Left Interaction and XRI Right Interaction (XRI Default Input Actions).")]
         [SerializeField] private InputActionReference[] _showControlsActions;
 
+        [Header("Controls Show — Meta SDK")]
+        [Tooltip("Controllers are polled via OVRInput (index trigger) — no wiring needed. " +
+                 "For hand tracking, drag the left/right OVRHand so an index-finger pinch " +
+                 "(thumb + index touch) re-summons the controls.")]
+        [SerializeField] private OVRHand _leftHand;
+        [SerializeField] private OVRHand _rightHand;
+
         // ── Runtime ───────────────────────────────────────────────────
+
+        // The whole UI lives under an OVROverlayCanvas (Meta composition layer).
+        // In PunchAHole/Underlay mode the controls are composited *behind* the eye
+        // buffer, so the opaque video occludes them. While the video page is open we
+        // disable the overlay; the canvas then falls back to its imposter mesh, which
+        // renders the controls in the eye buffer *on top* of the video (the behaviour
+        // we had before switching to the Meta UI). Restored on exit.
+        private OVROverlayCanvas _overlayCanvas;
 
         private string _projectId;
         private PlaylistItem _currentItem;
@@ -95,6 +110,12 @@ namespace Kyalio.Pages
 
         // Trigger press summons the controls; idle timer hides them again.
         private float _controlsIdleTimer;
+
+        // Show-controls input is only polled while the page is active (set in
+        // SubscribeShowControls / cleared in UnsubscribeShowControls).
+        private bool _showControlsInputActive;
+        private bool _leftPinching;
+        private bool _rightPinching;
 
         private const double SkipSeconds = 10.0;
         private const float WatchSyncIntervalSecs = 10f;
@@ -123,6 +144,8 @@ namespace Kyalio.Pages
 
             if (_mediaPlayer != null)
                 _mediaPlayer.Events.AddListener(OnMediaPlayerEvent);
+
+            _overlayCanvas = GetComponentInParent<OVROverlayCanvas>(includeInactive: true);
         }
 
         private void OnDestroy()
@@ -133,6 +156,10 @@ namespace Kyalio.Pages
 
         private void Update()
         {
+            // Poll before the media guard so the trigger / pinch can summon the
+            // controls even while paused or before the media has opened.
+            PollShowControlsInput();
+
             if (_mediaPlayer?.Control == null || !_mediaPlayer.MediaOpened) return;
 
             double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
@@ -152,7 +179,8 @@ namespace Kyalio.Pages
 
             // Auto-hide the controls after inactivity, but only while actually
             // playing — keep them up while paused so the user can act.
-            if (ControlsVisible && _mediaPlayer.Control.IsPlaying())
+            // Set _controlsHideDelay <= 0 to keep the controls permanently visible.
+            if (_controlsHideDelay > 0f && ControlsVisible && _mediaPlayer.Control.IsPlaying())
             {
                 _controlsIdleTimer += Time.deltaTime;
                 if (_controlsIdleTimer >= _controlsHideDelay)
@@ -184,6 +212,10 @@ namespace Kyalio.Pages
             if (_avProRoot != null) _avProRoot.SetActive(true);
             if (_tabBarRoot != null) _tabBarRoot.SetActive(false);
             _speedPanel?.SetActive(false);
+
+            // Render the controls in the eye buffer (imposter) so they draw on top of
+            // the video instead of being occluded behind the underlay composition layer.
+            if (_overlayCanvas != null) _overlayCanvas.overlayEnabled = false;
 
             // Controls start visible; the idle timer (counted only while playing)
             // hides them ~5 s after playback begins.
@@ -230,6 +262,9 @@ namespace Kyalio.Pages
 
             if (_avProRoot != null) _avProRoot.SetActive(false);
             if (_tabBarRoot != null) _tabBarRoot.SetActive(true);
+
+            // Restore the Meta composition-layer rendering for the menu UI.
+            if (_overlayCanvas != null) _overlayCanvas.overlayEnabled = true;
         }
 
         // ── Load & play ───────────────────────────────────────────────
@@ -526,12 +561,50 @@ namespace Kyalio.Pages
 
         private void OnShowControlsInput(InputAction.CallbackContext _) => ShowControls();
 
+        /// <summary>
+        /// Re-summons the controls from a controller index-trigger press or a
+        /// hand-tracking index-finger pinch (thumb + index touch). Polled in Update
+        /// while the page is active.
+        /// </summary>
+        private void PollShowControlsInput()
+        {
+            if (!_showControlsInputActive) return;
+
+            // Controllers — index trigger on either hand.
+            if (OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.LTouch) ||
+                OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.RTouch))
+            {
+                ShowControls();
+                return;
+            }
+
+            // Hand tracking — rising edge of an index-finger pinch, so holding the
+            // pinch doesn't re-fire every frame.
+            if (PollPinch(_leftHand, ref _leftPinching) || PollPinch(_rightHand, ref _rightPinching))
+                ShowControls();
+        }
+
+        /// <summary>Returns true on the frame an index-finger pinch begins.</summary>
+        private static bool PollPinch(OVRHand hand, ref bool wasPinching)
+        {
+            bool pinching = hand != null
+                         && hand.IsTracked
+                         && hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+            bool justStarted = pinching && !wasPinching;
+            wasPinching = pinching;
+            return justStarted;
+        }
+
         // The Activate actions are shared with XRI, so we only attach/detach our
         // callback here — never Disable() them, or the trigger would stop working
         // app-wide once this page is left. We Enable() defensively in case the rig
         // hasn't, which is idempotent if it already has.
         private void SubscribeShowControls()
         {
+            // Enable OVRInput / OVRHand polling for the lifetime of the page.
+            _showControlsInputActive = true;
+            _leftPinching = _rightPinching = false;
+
             if (_showControlsActions == null) return;
             foreach (var reference in _showControlsActions)
             {
@@ -544,6 +617,8 @@ namespace Kyalio.Pages
 
         private void UnsubscribeShowControls()
         {
+            _showControlsInputActive = false;
+
             if (_showControlsActions == null) return;
             foreach (var reference in _showControlsActions)
             {
