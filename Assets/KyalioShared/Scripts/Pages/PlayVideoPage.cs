@@ -570,9 +570,11 @@ namespace Kyalio.Pages
         {
             if (!_showControlsInputActive) return;
 
-            // Controllers — index trigger on either hand.
-            if (OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.LTouch) ||
-                OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.RTouch))
+            // Controllers — index trigger on either hand. Use RawButton (not the
+            // Primary/Secondary virtual buttons): the virtual buttons are bound to the
+            // "active" controller, so filtering them by LTouch/RTouch can drop the press.
+            if (OVRInput.GetDown(OVRInput.RawButton.LIndexTrigger) ||
+                OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger))
             {
                 ShowControls();
                 return;
