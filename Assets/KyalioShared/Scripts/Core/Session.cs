@@ -1,5 +1,6 @@
 using System;
 using Cysharp.Threading.Tasks;
+using Kyalio.Components;
 using Kyalio.State;
 using Kyalio.Utils;
 using UnityEngine;
@@ -47,7 +48,9 @@ namespace Kyalio.Core
         /// <summary>
         /// Handle access-token expiry (401). Skips the server-side logout call (the bearer is
         /// already invalid) and drops local session state before returning to the pairing
-        /// screen. Quest has no refresh-token flow, so expiry always means re-pair.
+        /// screen. Quest has no refresh-token flow, so expiry always means re-pair. Shows a
+        /// popup informing the user why they were signed out — the underlying page is switched
+        /// to Login first so the popup overlays a stable screen when dismissed.
         /// </summary>
         public static void ExpireToLogin()
         {
@@ -60,6 +63,8 @@ namespace Kyalio.Core
             ThumbnailLoader.ClearCache();
 
             UIManager.Instance?.SwitchPage(PageType.Login);
+
+            PopupManager.Instance?.ShowDone("Your session has expired. Please sign in again.");
         }
     }
 }
