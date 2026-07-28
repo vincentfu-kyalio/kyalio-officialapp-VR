@@ -7428,6 +7428,7 @@ GameObject:
   - component: {fileID: 802537325}
   - component: {fileID: 802537324}
   - component: {fileID: 802537327}
+  - component: {fileID: 802537328}
   m_Layer: 0
   m_Name: ApplyToMesh
   m_TagString: Untagged
@@ -7444,8 +7445,8 @@ Transform:
   m_GameObject: {fileID: 802537322}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 0, z: 0.5}
-  m_LocalScale: {x: 4, y: 4, z: 4}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 100, y: 100, z: 100}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 1331858730}
@@ -7593,6 +7594,20 @@ MonoBehaviour:
   useEfficientSharpen: 0
   useAutomaticFiltering: 0
   _previewInEditor: 1
+--- !u!114 &802537328
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 802537322}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bada637536a5532448678cb90f33943d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Components.VideoSphereRecenter
+  _targetCamera: {fileID: 1464484585}
+  _alignYaw: 1
 --- !u!1 &804638951
 GameObject:
   m_ObjectHideFlags: 0
@@ -12583,8 +12598,6 @@ MonoBehaviour:
   wideMotionModeHandPosesEnabled: 0
   _readOnlyFastMotionModeHandPosesEnabled: 0
   fastMotionModeHandPosesEnabled: 0
-  _readOnlyWideMotionMode2HandPosesEnabled: 0
-  wideMotionMode2HandPosesEnabled: 0
   dynamicResolutionVersion: 1
 --- !u!114 &1289888445
 MonoBehaviour:
@@ -24015,7 +24028,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -158}
+  m_AnchoredPosition: {x: 0, y: -450}
   m_SizeDelta: {x: 1920, y: 1080}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &159399960306768134
@@ -69746,6 +69759,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Pages.PlayVideoPage
   _mediaPlayer: {fileID: 1968365146}
   _avProRoot: {fileID: 1331858729}
+  _sphereRecenter: {fileID: 802537328}
   _tabBarRoot: {fileID: 7973857900773026512}
   _homeButton: {fileID: 232685760983251422}
   _playPauseButton: {fileID: 588459910197860266}

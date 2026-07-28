@@ -40,6 +40,7 @@ namespace Kyalio.Pages
         [Header("AVPro")]
         [SerializeField] private MediaPlayer _mediaPlayer;
         [SerializeField] private GameObject _avProRoot;
+        [SerializeField] private VideoSphereRecenter _sphereRecenter;
 
         [Header("Navigation")]
         [SerializeField] private GameObject _tabBarRoot;
@@ -143,9 +144,9 @@ namespace Kyalio.Pages
             _speedPanelCloseButton?.onClick.AddListener(() =>
                 _speedPanel?.SetActive(false));
 
-            _speed1Toggle?.onValueChanged.AddListener(on   => { if (on) SetSpeed(1f); });
+            _speed1Toggle?.onValueChanged.AddListener(on => { if (on) SetSpeed(1f); });
             _speed125Toggle?.onValueChanged.AddListener(on => { if (on) SetSpeed(1.25f); });
-            _speed15Toggle?.onValueChanged.AddListener(on  => { if (on) SetSpeed(1.5f); });
+            _speed15Toggle?.onValueChanged.AddListener(on => { if (on) SetSpeed(1.5f); });
 
             if (_mediaPlayer != null)
                 _mediaPlayer.Events.AddListener(OnMediaPlayerEvent);
@@ -181,7 +182,7 @@ namespace Kyalio.Pages
             if (_mediaPlayer?.Control == null || !_mediaPlayer.MediaOpened) return;
 
             double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
-            double current  = _mediaPlayer.Control.GetCurrentTime();
+            double current = _mediaPlayer.Control.GetCurrentTime();
 
             // Scrub bar — guard against re-entrant callbacks
             if (duration > 0 && !_preventSliderCallback)
@@ -223,11 +224,16 @@ namespace Kyalio.Pages
         {
             if (param is ValueTuple<string, PlaylistItem> t)
             {
-                _projectId  = t.Item1;
+                _projectId = t.Item1;
                 _currentItem = t.Item2;
             }
 
             if (_avProRoot != null) _avProRoot.SetActive(true);
+
+            // 球體啟用後立刻置中：球心對到眼睛高度，影片正面轉向使用者當下的朝向。
+            // 必須在 SetActive(true) 之後，元件的 Awake 才跑得到。
+            _sphereRecenter?.Recenter();
+
             if (_tabBarRoot != null) _tabBarRoot.SetActive(false);
             _speedPanel?.SetActive(false);
 
@@ -432,7 +438,7 @@ namespace Kyalio.Pages
             }
 
             state.AdvancePlaylist();
-            _currentItem            = state.Playlist[state.PlaylistIndex];
+            _currentItem = state.Playlist[state.PlaylistIndex];
             _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
             RefreshNavButtons();
 
@@ -459,7 +465,7 @@ namespace Kyalio.Pages
         {
             if (_mediaPlayer?.Control == null) return;
             double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
-            double target   = Math.Min(_mediaPlayer.Control.GetCurrentTime() + SkipSeconds, duration);
+            double target = Math.Min(_mediaPlayer.Control.GetCurrentTime() + SkipSeconds, duration);
             _mediaPlayer.Control.Seek(target);
         }
 
@@ -497,7 +503,7 @@ namespace Kyalio.Pages
         private void SwitchToPlaylistItem(PlaylistItem item)
         {
             _expiryChecker.Stop();
-            _currentItem            = item;
+            _currentItem = item;
             _knownProgressUpdatedAt = ProgressUpdatedAt(item);
             RefreshNavButtons();
 
@@ -549,8 +555,8 @@ namespace Kyalio.Pages
 
             var request = new UpdateWatchProgressRequest
             {
-                ProgressMs             = (int)AppPlaybackState.Instance.CurrentPositionMs,
-                ProjectId              = _projectId,
+                ProgressMs = (int)AppPlaybackState.Instance.CurrentPositionMs,
+                ProjectId = _projectId,
                 KnownProgressUpdatedAt = _knownProgressUpdatedAt,
             };
 
@@ -692,7 +698,7 @@ namespace Kyalio.Pages
         private void UpdateTimeText(double current, double duration)
         {
             if (_currentTimeText != null) _currentTimeText.text = FormatTime(current);
-            if (_durationText != null)    _durationText.text    = FormatTime(duration);
+            if (_durationText != null) _durationText.text = FormatTime(duration);
         }
 
         private static string FormatTime(double totalSeconds)
