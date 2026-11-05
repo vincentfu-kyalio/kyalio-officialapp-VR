@@ -69,6 +69,39 @@ namespace Kyalio.Services.V2
                     _          => null,
                 },
                 ct);
+        // ── Quest password login ─────────────────────────────────────
+
+        /// <summary>
+        /// POST /api/auth/quest/login (X-Quest-Key). Returns the same non-refreshable Quest
+        /// credential as pairing. Throws ApiException 409 with a DeviceConflictResponse body
+        /// when signing in would end another Quest session — confirm via
+        /// <see cref="ConfirmQuestLoginAsync"/>.
+        /// </summary>
+        public UniTask<CredentialResponse> QuestLoginAsync(
+            string email, string password, CancellationToken ct = default)
+        {
+            var body = new QuestLoginRequest
+            {
+                Email    = email,
+                Password = password,
+                DeviceId = DeviceIdProvider.GetOrCreate(),
+                Model    = SystemInfo.deviceModel,
+                DeviceOs = "Quest OS",
+            };
+            return _client.PostAsync<CredentialResponse>(
+                "/api/auth/quest/login", body, _questKeyHeader, ct);
+        }
+
+        /// <summary>
+        /// POST /api/auth/quest/login/confirm (X-Quest-Key). May throw a fresh 409 with a new
+        /// ticket if another conflict appeared after the first ticket was issued.
+        /// </summary>
+        public UniTask<CredentialResponse> ConfirmQuestLoginAsync(
+            string ticket, CancellationToken ct = default)
+            => _client.PostAsync<CredentialResponse>(
+                "/api/auth/quest/login/confirm",
+                new DeviceTicketRequest { Ticket = ticket }, _questKeyHeader, ct);
+
         /// <summary>
         /// POST /api/pair/verify — confirm a 6-digit pairing code. Returns 204 on success;
         /// throws ApiException 404 (unknown/expired) or 409 (already used).
@@ -94,9 +127,14 @@ namespace Kyalio.Services.V2
             => _client.PostAsync<CredentialResponse>(
                 "/api/auth/refresh", new RefreshRequest { RefreshToken = refreshToken }, null, ct);
 
+        /// <summary>
+        /// POST /api/auth/forgot-password. Accepts X-Quest-Key or X-App-Key; the Quest build
+        /// only has the Quest key, so prefer it.
+        /// </summary>
         public UniTask<ForgotPasswordResponse> ForgotPasswordAsync(string email, CancellationToken ct = default)
             => _client.PostAsync<ForgotPasswordResponse>(
-                "/api/auth/forgot-password", new ForgotPasswordRequest { Email = email }, _appKeyHeader, ct);
+                "/api/auth/forgot-password", new ForgotPasswordRequest { Email = email },
+                _questKeyHeader ?? _appKeyHeader, ct);
 
         // ── Logout ───────────────────────────────────────────────────
 

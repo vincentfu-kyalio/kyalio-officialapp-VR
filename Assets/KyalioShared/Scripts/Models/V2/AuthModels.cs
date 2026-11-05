@@ -62,8 +62,13 @@ namespace Kyalio.Models.V2
         [JsonProperty("deviceOs")]
         public string DeviceOs;
 
+        /// <summary>Mobile conflicts only.</summary>
         [JsonProperty("lastSeenAt")]
         public string LastSeenAt;
+
+        /// <summary>Quest conflicts only — when that Quest session began.</summary>
+        [JsonProperty("startedAt")]
+        public string StartedAt;
     }
 
     /// <summary>
@@ -127,6 +132,38 @@ namespace Kyalio.Models.V2
     {
         [JsonProperty("message")]
         public string Message;
+    }
+
+    // ── Quest password login ─────────────────────────────────────────
+
+    /// <summary>
+    /// Body for POST /api/auth/quest/login. deviceId must be the same stable Quest ID
+    /// sent to POST /api/pair/request. Confirm (POST /api/auth/quest/login/confirm)
+    /// reuses <see cref="DeviceTicketRequest"/>.
+    /// </summary>
+    public class QuestLoginRequest
+    {
+        [JsonProperty("email")]
+        public string Email;
+
+        [JsonProperty("password")]
+        public string Password;
+
+        [JsonProperty("deviceId")]
+        public string DeviceId;
+
+        [JsonProperty("model")]
+        public string Model;
+
+        [JsonProperty("deviceOs")]
+        public string DeviceOs;
+    }
+
+    /// <summary>Generic error body: { "error": { "code", "message" } }.</summary>
+    public class ErrorResponse
+    {
+        [JsonProperty("error")]
+        public ErrorEnvelope Error;
     }
 
     // ── Quest pairing ────────────────────────────────────────────────
