@@ -110,7 +110,8 @@ namespace Kyalio.Services
             using var req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbGET);
             req.SetRequestHeader("Accept", "text/event-stream");
             req.SetRequestHeader("Cache-Control", "no-cache");
-            if (!string.IsNullOrEmpty(_token))
+            var sentBearer = !string.IsNullOrEmpty(_token);
+            if (sentBearer)
                 req.SetRequestHeader("Authorization", $"Bearer {_token}");
             if (!string.IsNullOrEmpty(_appVersion))
                 req.SetRequestHeader(AppVersionHeader, _appVersion);
@@ -140,7 +141,7 @@ namespace Kyalio.Services
                 else
                     Debug.LogWarning($"[ApiClient] SSE {url} \u2192 {code}\n{body}");
                 HandleForceUpdate(code, body);
-                HandleUnauthorized(code);
+                HandleUnauthorized(code, sentBearer);
                 throw new ApiException(code, body);
             }
 
@@ -167,7 +168,8 @@ namespace Kyalio.Services
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Accept", "application/json");
 
-            if (!string.IsNullOrEmpty(_token))
+            var sentBearer = !string.IsNullOrEmpty(_token);
+            if (sentBearer)
                 req.SetRequestHeader("Authorization", $"Bearer {_token}");
 
             if (!string.IsNullOrEmpty(_appVersion))
@@ -201,7 +203,7 @@ namespace Kyalio.Services
                 else
                     Debug.LogWarning($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
                 HandleForceUpdate(code, body);
-                HandleUnauthorized(code);
+                HandleUnauthorized(code, sentBearer);
                 throw new ApiException(code, body);
             }
 
@@ -235,7 +237,8 @@ namespace Kyalio.Services
 
             req.downloadHandler = new DownloadHandlerBuffer();
 
-            if (!string.IsNullOrEmpty(_token))
+            var sentBearer = !string.IsNullOrEmpty(_token);
+            if (sentBearer)
                 req.SetRequestHeader("Authorization", $"Bearer {_token}");
 
             if (!string.IsNullOrEmpty(_appVersion))
@@ -268,7 +271,7 @@ namespace Kyalio.Services
                 else
                     Debug.LogWarning($"[ApiClient] {method} {url} \u2192 {code}\n{body}");
                 HandleForceUpdate(code, body);
-                HandleUnauthorized(code);
+                HandleUnauthorized(code, sentBearer);
                 throw new ApiException(code, body);
             }
 
@@ -292,9 +295,15 @@ namespace Kyalio.Services
             OnForceUpdateRequired.Invoke(info);
         }
 
-        private void HandleUnauthorized(int statusCode)
+        /// <summary>
+        /// Only a 401 on a Bearer-authenticated request means the session is gone. Pre-login
+        /// endpoints (quest login, ticket confirm) also return 401 for wrong credentials or a
+        /// stale ticket — those must surface to the caller, not bounce to "session expired".
+        /// </summary>
+        private void HandleUnauthorized(int statusCode, bool sentBearer)
         {
             if (statusCode != 401) return;
+            if (!sentBearer) return;
             if (_unauthorizedFired) return;
             _unauthorizedFired = true;
             OnUnauthorized?.Invoke();

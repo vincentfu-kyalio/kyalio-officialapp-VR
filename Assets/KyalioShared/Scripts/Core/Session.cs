@@ -34,7 +34,9 @@ namespace Kyalio.Core
                 Debug.LogWarning($"[Session] Server logout failed (continuing): {e.Message}");
             }
 
-            // 2. Drop the bearer and all in-memory session state.
+            // 2. Drop the bearer, the persisted credential (must happen before returning to
+            //    Login, or LoginPage would auto-resume it) and all in-memory session state.
+            AuthStorage.ClearCredential();
             ServiceLocator.Instance.ApiClient.ClearToken();
             AppState.Reset();          // also resets ProjectCacheRepository (V2)
             UserLocalState.Reset();
@@ -56,6 +58,7 @@ namespace Kyalio.Core
         {
             Debug.Log("[Session] Access token expired — returning to login.");
 
+            AuthStorage.ClearCredential();
             ServiceLocator.Instance.ApiClient.ClearToken();
             AppState.Reset();
             UserLocalState.Reset();
