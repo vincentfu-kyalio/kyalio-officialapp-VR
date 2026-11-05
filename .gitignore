@@ -110,3 +110,6 @@ Docs/**/*.gif
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+# Meta Immersive Debugger DevAgent (per-machine IP & token)
+/[Aa]ssets/[Rr]esources/DevAgentSettings.asset
+/[Aa]ssets/[Rr]esources/DevAgentSettings.asset.meta
