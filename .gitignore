@@ -113,3 +113,7 @@ Docs/**/*.gif
 # Meta Immersive Debugger DevAgent (per-machine IP & token)
 /[Aa]ssets/[Rr]esources/DevAgentSettings.asset
 /[Aa]ssets/[Rr]esources/DevAgentSettings.asset.meta
+
+# Android signing keystore (keep out of repo)
+*.keystore
+*.jks
