@@ -15404,7 +15404,7 @@ GameObject:
   - component: {fileID: 1375637928}
   - component: {fileID: 1375637929}
   m_Layer: 3
-  m_Name: Toggle
+  m_Name: loop_Toggle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -15478,7 +15478,7 @@ MonoBehaviour:
   onValueChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_IsOn: 1
+  m_IsOn: 0
 --- !u!1 &1376044412
 GameObject:
   m_ObjectHideFlags: 0
@@ -63123,7 +63123,7 @@ GameObject:
   - component: {fileID: 7619814726525402567}
   - component: {fileID: 6826192680278074148}
   m_Layer: 3
-  m_Name: Slider
+  m_Name: progress_Slider
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -72662,6 +72662,7 @@ MonoBehaviour:
   _skipBackwardButton: {fileID: 4268965999597512765}
   _nextButton: {fileID: 8675282321618701429}
   _prevButton: {fileID: 451759592258703720}
+  _loopToggle: {fileID: 1375637929}
   _progressSlider: {fileID: 6826192680278074148}
   _currentTimeText: {fileID: 858336477873364290}
   _durationText: {fileID: 6294661448819268400}
@@ -85836,7 +85837,7 @@ GameObject:
   - component: {fileID: 6735824766211888698}
   - component: {fileID: 6294661448819268400}
   m_Layer: 3
-  m_Name: FullTime
+  m_Name: fullTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -85897,7 +85898,7 @@ GameObject:
   - component: {fileID: 1898138267185466328}
   - component: {fileID: 8675282321618701429}
   m_Layer: 3
-  m_Name: nextV_Button
+  m_Name: nextVideo_Button
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -86977,7 +86978,7 @@ GameObject:
   - component: {fileID: 963536870966340052}
   - component: {fileID: 451759592258703720}
   m_Layer: 3
-  m_Name: lastV_Button
+  m_Name: lastVideo_Button
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -91009,7 +91010,7 @@ GameObject:
   - component: {fileID: 7859209127792926508}
   - component: {fileID: 7907551791381561709}
   m_Layer: 3
-  m_Name: back
+  m_Name: background
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -95241,8 +95242,8 @@ RectTransform:
   - {fileID: 5901713696741521842}
   - {fileID: 8860492561467148516}
   - {fileID: 534824016410521840}
-  - {fileID: 7619814726525402567}
   - {fileID: 5132848788721826818}
+  - {fileID: 7619814726525402567}
   - {fileID: 1375637928}
   - {fileID: 1010015276035902760}
   - {fileID: 975270981081555125}

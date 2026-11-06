@@ -55,6 +55,8 @@ namespace Kyalio.Pages
         [SerializeField] private Button _skipBackwardButton;
         [SerializeField] private Button _nextButton;
         [SerializeField] private Button _prevButton;
+        [Tooltip("When on, the current video repeats instead of ending / advancing the playlist.")]
+        [SerializeField] private Toggle _loopToggle;
 
         [Header("Progress")]
         [SerializeField] private Slider _progressSlider;
@@ -138,6 +140,7 @@ namespace Kyalio.Pages
             _prevButton?.onClick.AddListener(OnPrevClicked);
 
             _progressSlider?.onValueChanged.AddListener(OnSliderChanged);
+            _loopToggle?.onValueChanged.AddListener(SetLoop);
 
             _speedButton?.onClick.AddListener(() =>
                 _speedPanel?.SetActive(!(_speedPanel?.activeSelf ?? false)));
@@ -259,7 +262,9 @@ namespace Kyalio.Pages
             SetSpeed(1f);
             RefreshNavButtons();
             UpdateTimeText(0, 0);
-            if (_mediaPlayer != null) _mediaPlayer.Loop = false;
+            // Keep the user's Loop choice from the toggle; it persists across
+            // episodes and media re-opens (AVPro stores it on the MediaPlayer).
+            SetLoop(_loopToggle != null && _loopToggle.isOn);
 
             LoadAndPlayAsync(_projectId, _currentItem, _cts.Token).Forget();
         }
@@ -427,6 +432,15 @@ namespace Kyalio.Pages
             if (!DevFlags.UseFakeData)
                 SyncWatchProgressAsync(CancellationToken.None).Forget();
 
+            // AVPro loops natively when Loop is set, so this normally doesn't fire.
+            // Fallback for platforms/streams that still report the end: restart.
+            if (_mediaPlayer != null && _mediaPlayer.Loop)
+            {
+                _mediaPlayer.Control?.Seek(0);
+                _mediaPlayer.Control?.Play();
+                return;
+            }
+
             var state = AppPlaybackState.Instance;
             if (!state.HasNext)
             {
@@ -520,6 +534,14 @@ namespace Kyalio.Pages
             double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
             if (duration > 0)
                 _mediaPlayer.Control.Seek(value * duration);
+        }
+
+        // ── Loop ──────────────────────────────────────────────────────
+
+        private void SetLoop(bool loop)
+        {
+            if (_mediaPlayer != null) _mediaPlayer.Loop = loop;
+            _loopToggle?.SetIsOnWithoutNotify(loop);
         }
 
         // ── Speed ─────────────────────────────────────────────────────
