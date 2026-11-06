@@ -95764,6 +95764,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f2b526a7f14373b4c8aee543413c2720, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Kyalio.Pages.LoginPage
+  _usePasswordPanel: {fileID: 1697215724}
+  _useCodePanel: {fileID: 215982620}
+  _emailInput: {fileID: 1953531119}
+  _passwordInput: {fileID: 675762272}
+  _showPasswordToggle: {fileID: 144966715}
+  _rememberToggle: {fileID: 614394225}
+  _loginButton: {fileID: 534188475}
+  _forgotPasswordButton: {fileID: 619226729}
+  _useCodeButton: {fileID: 1564743457}
   _codeDigits:
   - {fileID: 4791258226189351031}
   - {fileID: 5888194724098395057}
@@ -95771,7 +95780,8 @@ MonoBehaviour:
   - {fileID: 1678406781}
   - {fileID: 1346989715}
   - {fileID: 2140437491}
-  _loadingIndicator: {fileID: 0}
+  _usePasswordButton: {fileID: 1666294725}
+  _loadingIndicator: {fileID: 351249457}
   _tabBarRoot: {fileID: 7973857900773026512}
 --- !u!114 &8158360732187378216
 MonoBehaviour:
