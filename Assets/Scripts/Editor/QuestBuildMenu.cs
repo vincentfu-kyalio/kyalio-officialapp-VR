@@ -15,6 +15,7 @@ namespace Kyalio.EditorTools
     /// Build menu for Meta Quest APKs.
     ///
     /// Quest Dev Build         — development APK; version code unchanged.
+    /// Quest Dev Build and Run — same, then installs and launches it on the connected Quest.
     /// Quest Release           — bumps the Android version code, builds a release APK
     ///                           and verifies it is signed with the Store key.
     ///                           The version code is rolled back if the build fails.
@@ -49,6 +50,16 @@ namespace Kyalio.EditorTools
 
             var code = PlayerSettings.Android.bundleVersionCode;
             Build(ApkPath(code, "_dev"), BuildOptions.Development);
+        }
+
+        [MenuItem("Build/Quest Dev Build and Run")]
+        private static void BuildDevAndRun()
+        {
+            if (!Preflight(showWhenReady: false)) return;
+
+            // AutoRunPlayer installs the APK on the connected Quest over adb and launches it.
+            var code = PlayerSettings.Android.bundleVersionCode;
+            Build(ApkPath(code, "_dev"), BuildOptions.Development | BuildOptions.AutoRunPlayer);
         }
 
         [MenuItem("Build/Quest Release")]
