@@ -11,6 +11,10 @@ namespace Kyalio.Components
     ///
     /// Inspector: assign messageText, then each button group with its buttons.
     /// All three groups (yesNoGroup, deleteCancelGroup, doneGroup) must be assigned.
+    ///
+    /// Works whether the GameObject starts active or inactive in the scene.
+    /// Showing a popup while another is open dismisses the old one: its secondary
+    /// action (No / Cancel) runs, so callers awaiting an answer are always released.
     /// </summary>
     public class PopupPanel : MonoBehaviour
     {
@@ -32,16 +36,20 @@ namespace Kyalio.Components
 
         private Action _primaryAction;
         private Action _secondaryAction;
+        private bool _visible;
 
         private void Awake()
         {
-            yesButton.onClick.AddListener(() => { _primaryAction?.Invoke(); Hide(); });
-            noButton.onClick.AddListener(() => { _secondaryAction?.Invoke(); Hide(); });
-            deleteButton.onClick.AddListener(() => { _primaryAction?.Invoke(); Hide(); });
-            cancelButton.onClick.AddListener(() => { _secondaryAction?.Invoke(); Hide(); });
-            doneButton.onClick.AddListener(() => { _primaryAction?.Invoke(); Hide(); });
+            yesButton.onClick.AddListener(OnPrimary);
+            noButton.onClick.AddListener(OnSecondary);
+            deleteButton.onClick.AddListener(OnPrimary);
+            cancelButton.onClick.AddListener(OnSecondary);
+            doneButton.onClick.AddListener(OnPrimary);
 
-            gameObject.SetActive(false);
+            // Hide when left active in the scene. When the object starts inactive, Awake
+            // first runs inside Show()'s SetActive(true) and must not hide it again.
+            if (!_visible)
+                gameObject.SetActive(false);
         }
 
         public void ShowYesNo(string message, Action onYes, Action onNo = null)
@@ -53,10 +61,34 @@ namespace Kyalio.Components
         public void ShowDone(string message, Action onDone = null)
             => Show(message, doneGroup, onDone, null);
 
-        public void Hide() => gameObject.SetActive(false);
+        /// <summary>Dismisses the popup as if No / Cancel was pressed.</summary>
+        public void Hide() => Close(_secondaryAction);
+
+        private void OnPrimary() => Close(_primaryAction);
+
+        private void OnSecondary() => Close(_secondaryAction);
+
+        // Hide before invoking, so a callback that opens the next popup is not closed by this one.
+        private void Close(Action action)
+        {
+            _visible = false;
+            _primaryAction = null;
+            _secondaryAction = null;
+            gameObject.SetActive(false);
+
+            action?.Invoke();
+        }
 
         private void Show(string message, GameObject activeGroup, Action primary, Action secondary)
         {
+            if (_visible)
+            {
+                var replaced = _secondaryAction;
+                _primaryAction = null;
+                _secondaryAction = null;
+                replaced?.Invoke();
+            }
+
             messageText.text = message;
             _primaryAction = primary;
             _secondaryAction = secondary;
@@ -65,6 +97,7 @@ namespace Kyalio.Components
             deleteCancelGroup.SetActive(deleteCancelGroup == activeGroup);
             doneGroup.SetActive(doneGroup == activeGroup);
 
+            _visible = true;
             gameObject.SetActive(true);
         }
     }
