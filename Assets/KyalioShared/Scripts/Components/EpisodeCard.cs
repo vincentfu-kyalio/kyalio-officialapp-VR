@@ -30,6 +30,7 @@ namespace Kyalio.Components
 
         private void Awake()
         {
+            ThumbnailLoader.Track(thumbnail);
             button.onClick.AddListener(() => OnClicked?.Invoke(_projectId, _item));
 
             if (progressBar != null)

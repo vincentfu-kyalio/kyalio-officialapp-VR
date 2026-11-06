@@ -45,6 +45,7 @@ namespace Kyalio.Components
 
         private void Awake()
         {
+            ThumbnailLoader.Track(thumbnail, programPicImage);
             toggle.onValueChanged.AddListener(isOn =>
                 OnSelectionChanged?.Invoke(_projectId, isOn));
 

@@ -82,6 +82,7 @@ namespace Kyalio.Pages
         // ── Lifecycle ─────────────────────────────────────────────────
         private void Awake()
         {
+            ThumbnailLoader.Track(thumbnailImage);
             backButton.onClick.AddListener(() => UIManager.Instance.GoBack());
             favoriteButton.onClick.AddListener(OnFavoriteToggled);
 

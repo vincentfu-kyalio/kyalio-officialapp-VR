@@ -6,13 +6,21 @@ using Kyalio.Core;
 using Kyalio.Services;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.UI;
 
 namespace Kyalio.Utils
 {
     /// <summary>
     /// Asynchronous thumbnail loader with an LRU in-memory cache.
-    /// Duplicate requests for the same URL are de-duplicated.
-    /// Oldest sprites are evicted and their textures destroyed when the cache is full.
+    ///
+    /// Duplicate requests for the same URL share one download. The download is only
+    /// cancelled once every caller waiting on it has cancelled, so one recycled card
+    /// cannot leave the other cards with the same URL blank.
+    ///
+    /// When the cache is full the least recently used sprite is destroyed, unless an Image
+    /// registered through <see cref="Track"/> still shows it. Lists are not virtualised
+    /// (every card of a long list is alive at once), so an untracked eviction would blank
+    /// cards that are on screen.
     /// </summary>
     public static class ThumbnailLoader
     {
@@ -23,7 +31,15 @@ namespace Kyalio.Utils
 
         private static readonly Dictionary<string, LinkedListNode<(string url, Sprite sprite)>> _cache = new();
         private static readonly LinkedList<(string url, Sprite sprite)> _lruList = new();
-        private static readonly Dictionary<string, UniTaskCompletionSource<Sprite>> _pending = new();
+        private static readonly Dictionary<string, PendingLoad> _pending = new();
+        private static readonly List<Image> _trackedImages = new();
+
+        private class PendingLoad
+        {
+            public readonly UniTaskCompletionSource<Sprite> Result = new();
+            public readonly CancellationTokenSource Cts = new();
+            public int Waiters;
+        }
 
         /// <summary>
         /// Resolves a (possibly relative) image URL. The V2 contract returns relative
@@ -41,11 +57,24 @@ namespace Kyalio.Utils
         }
 
         /// <summary>
-        /// Loads a thumbnail and returns a Sprite; returns null on failure.
+        /// Registers Images that display sprites from this loader, so cache eviction never
+        /// destroys a sprite one of them still shows. Call once per Image (e.g. in Awake);
+        /// destroyed Images are pruned automatically. Null entries are ignored.
+        /// </summary>
+        public static void Track(params Image[] images)
+        {
+            foreach (var image in images)
+                if (image != null && !_trackedImages.Contains(image))
+                    _trackedImages.Add(image);
+        }
+
+        /// <summary>
+        /// Loads a thumbnail and returns a Sprite; returns null on failure or cancellation.
         /// </summary>
         public static async UniTask<Sprite> LoadAsync(string url, CancellationToken ct = default)
         {
             if (string.IsNullOrEmpty(url)) return null;
+            if (ct.IsCancellationRequested) return null;
 
             if (_cache.TryGetValue(url, out var node))
             {
@@ -55,28 +84,58 @@ namespace Kyalio.Utils
                 return node.Value.sprite;
             }
 
-            // If the same URL is already in-flight, await the same result
-            if (_pending.TryGetValue(url, out var tcs))
-                return await tcs.Task;
+            // Join the in-flight download for this URL, or start one. A download whose
+            // waiters all cancelled may still be winding down; start a fresh one instead.
+            if (!_pending.TryGetValue(url, out var load) || load.Cts.IsCancellationRequested)
+            {
+                load = new PendingLoad();
+                _pending[url] = load;
+                DownloadAsync(url, load).Forget();
+            }
 
-            tcs = new UniTaskCompletionSource<Sprite>();
-            _pending[url] = tcs;
-
-            // Wait for a download slot — cancelled requests release immediately
+            load.Waiters++;
             try
             {
+                return await load.Result.Task.AttachExternalCancellation(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            finally
+            {
+                // Last waiter gone before the download finished — free the slot and bandwidth.
+                if (--load.Waiters == 0 && !load.Result.Task.Status.IsCompleted())
+                    load.Cts.Cancel();
+            }
+        }
+
+        public static void ClearCache()
+        {
+            foreach (var (_, sprite) in _lruList)
+                DestroySprite(sprite);
+            _cache.Clear();
+            _lruList.Clear();
+        }
+
+        private static async UniTaskVoid DownloadAsync(string url, PendingLoad load)
+        {
+            var ct = load.Cts.Token;
+            try
+            {
+                // Wait for a download slot — a cancelled load releases its place immediately.
                 await _concurrencyLimit.WaitAsync(ct);
             }
             catch (OperationCanceledException)
             {
-                tcs.TrySetCanceled();
-                _pending.Remove(url);
-                return null;
+                Finish(url, load, null, cancelled: true);
+                return;
             }
 
             try
             {
-                using var req = UnityWebRequestTexture.GetTexture(url);
+                // nonReadable: the texture lives on the GPU only, no CPU-side copy.
+                using var req = UnityWebRequestTexture.GetTexture(url, nonReadable: true);
                 var client = ServiceLocator.Instance.ApiClient;
                 if (!string.IsNullOrEmpty(client.Token))
                     req.SetRequestHeader("Authorization", $"Bearer {client.Token}");
@@ -84,13 +143,20 @@ namespace Kyalio.Utils
                 // its absence returns 400 APP_VERSION_MISSING. Harmless on signed Mux URLs.
                 if (!string.IsNullOrEmpty(client.AppVersion))
                     req.SetRequestHeader(ApiClient.AppVersionHeader, client.AppVersion);
-                await req.SendWebRequest().ToUniTask(cancellationToken: ct);
+                req.timeout = ApiClient.TimeoutSeconds;
+
+                try
+                {
+                    await req.SendWebRequest().ToUniTask(cancellationToken: ct);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch { /* non-2xx / network error — reported from req.result below */ }
 
                 if (req.result != UnityWebRequest.Result.Success)
                 {
                     Debug.LogWarning($"[ThumbnailLoader] Failed: {url} — {req.error}");
-                    tcs.TrySetResult(null);
-                    return null;
+                    Finish(url, load, null);
+                    return;
                 }
 
                 var tex = DownloadHandlerTexture.GetContent(req);
@@ -101,55 +167,73 @@ namespace Kyalio.Utils
                 );
 
                 AddToCache(url, sprite);
-                tcs.TrySetResult(sprite);
-                return sprite;
+                Finish(url, load, sprite);
             }
             catch (OperationCanceledException)
             {
-                tcs.TrySetCanceled();
-                return null;
+                Finish(url, load, null, cancelled: true);
             }
             catch (Exception e)
             {
                 Debug.LogError($"[ThumbnailLoader] Exception: {e.Message}");
-                tcs.TrySetResult(null);
-                return null;
+                Finish(url, load, null);
             }
             finally
             {
                 _concurrencyLimit.Release();
-                _pending.Remove(url);
             }
         }
 
-        public static void ClearCache()
+        private static void Finish(string url, PendingLoad load, Sprite sprite, bool cancelled = false)
         {
-            foreach (var node in _lruList)
-            {
-                if (node.sprite != null)
-                    UnityEngine.Object.Destroy(node.sprite.texture);
-            }
-            _cache.Clear();
-            _lruList.Clear();
+            // A newer load may have replaced this one after it was cancelled.
+            if (_pending.TryGetValue(url, out var current) && current == load)
+                _pending.Remove(url);
+
+            if (cancelled) load.Result.TrySetCanceled();
+            else load.Result.TrySetResult(sprite);
         }
 
         private static void AddToCache(string url, Sprite sprite)
         {
-            // Evict least recently used entry if at capacity
-            if (_cache.Count >= MaxCacheSize)
+            // Evict least recently used entries that nothing shows. Sprites still on screen
+            // are kept, so the cache can exceed MaxCacheSize while a long list is up.
+            var candidate = _lruList.Last;
+            while (_cache.Count >= MaxCacheSize && candidate != null)
             {
-                var oldest = _lruList.Last;
-                if (oldest != null)
+                var previous = candidate.Previous;
+                if (!IsInUse(candidate.Value.sprite))
                 {
-                    _lruList.RemoveLast();
-                    _cache.Remove(oldest.Value.url);
-                    if (oldest.Value.sprite != null)
-                        UnityEngine.Object.Destroy(oldest.Value.sprite.texture);
+                    _lruList.Remove(candidate);
+                    _cache.Remove(candidate.Value.url);
+                    DestroySprite(candidate.Value.sprite);
                 }
+                candidate = previous;
             }
 
             var newNode = _lruList.AddFirst((url, sprite));
             _cache[url] = newNode;
+        }
+
+        private static bool IsInUse(Sprite sprite)
+        {
+            if (sprite == null) return false;
+
+            var inUse = false;
+            for (int i = _trackedImages.Count - 1; i >= 0; i--)
+            {
+                var image = _trackedImages[i];
+                if (image == null) { _trackedImages.RemoveAt(i); continue; }
+                if (image.sprite == sprite) inUse = true;
+            }
+            return inUse;
+        }
+
+        private static void DestroySprite(Sprite sprite)
+        {
+            if (sprite == null) return;
+            UnityEngine.Object.Destroy(sprite.texture);
+            UnityEngine.Object.Destroy(sprite);
         }
     }
 }

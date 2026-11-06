@@ -57,6 +57,7 @@ namespace Kyalio.Components
         // ── Lifecycle ─────────────────────────────────────────────────
         private void Awake()
         {
+            ThumbnailLoader.Track(thumbnail);
             playButton.onClick.AddListener(() => OnClicked?.Invoke(_item));
 
             if (downloadButton != null)

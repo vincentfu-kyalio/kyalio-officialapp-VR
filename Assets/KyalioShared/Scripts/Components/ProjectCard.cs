@@ -34,6 +34,7 @@ namespace Kyalio.Components
 
         private void Awake()
         {
+            ThumbnailLoader.Track(thumbnail, programLogo);
             button.onClick.AddListener(() => OnClicked?.Invoke(_project));
         }
 
