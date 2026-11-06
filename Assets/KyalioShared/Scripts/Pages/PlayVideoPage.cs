@@ -283,7 +283,7 @@ namespace Kyalio.Pages
             AppState.Instance.MarkWatchHistoryDirty();
 
             // 回到主頁面時還原 3D 場景與天空盒（切頁 fade 由 UIManager.GoBack(fade: true) 負責，
-            // 故即時切換；影片若已自然結束則已還原，這裡會被守門略過）
+            // 故即時切換；影片自然結束時不會還原，統一在這裡還原）
             CinemaModeController.Instance?.Exit(fade: false);
 
             _mediaPlayer?.Control?.Pause();
@@ -444,9 +444,8 @@ namespace Kyalio.Pages
             var state = AppPlaybackState.Instance;
             if (!state.HasNext)
             {
-                // 影片播放結束（且無下一支）：仍停在播放頁，不是切頁，
-                // 故由本元件自帶 fade out/in 還原 3D 場景與天空盒
-                CinemaModeController.Instance?.Exit(fade: true);
+                // 影片播放結束（且無下一支）：維持影院模式，畫面停在最後一格，
+                // 不還原 3D 場景；按 Home 離開時由 OnExit 還原。
                 ShowControls(); // surface controls so the user can navigate
                 return; // Stay on the last frame; user presses Home
             }
@@ -470,9 +469,15 @@ namespace Kyalio.Pages
         {
             if (_mediaPlayer?.Control == null) return;
             if (_mediaPlayer.Control.IsPlaying())
+            {
                 _mediaPlayer.Control.Pause();
-            else
-                _mediaPlayer.Control.Play();
+                return;
+            }
+
+            // Ended on the last frame — Play replays from the start.
+            if (_mediaPlayer.Control.IsFinished())
+                _mediaPlayer.Control.Seek(0);
+            _mediaPlayer.Control.Play();
         }
 
         private void OnSkipForward()
