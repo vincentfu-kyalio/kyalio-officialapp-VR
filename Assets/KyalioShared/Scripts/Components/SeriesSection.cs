@@ -20,11 +20,10 @@ namespace Kyalio.Components
         [SerializeField] private EpisodeCard episodeCardPrefab;
         [SerializeField] private ScrollRect scrollRect;
 
-        private readonly List<ProjectCard> _projectPool  = new();
-        private readonly List<ProjectCard> _projectActive = new();
-
-        private readonly List<EpisodeCard> _episodePool  = new();
-        private readonly List<EpisodeCard> _episodeActive = new();
+        private CardPool<ProjectCard> _projectPool;
+        private CardPool<EpisodeCard> _episodePool;
+        private CardPool<ProjectCard> ProjectPool => _projectPool ??= new(projectCardPrefab, seriesContent, c => c.CancelLoads());
+        private CardPool<EpisodeCard> EpisodePool => _episodePool ??= new(episodeCardPrefab, seriesContent, c => c.CancelLoads());
 
         public System.Action<Project> OnProjectClicked;
 
@@ -40,13 +39,12 @@ namespace Kyalio.Components
         /// </summary>
         public void Bind(IReadOnlyList<Project> projects, bool keepScroll = false)
         {
-            ReturnAllEpisodes();
-            ReturnAllProjects();
+            Clear();
 
             if (projects == null) return;
             foreach (var p in projects)
             {
-                var card = GetProjectCard();
+                var card = ProjectPool.Get();
                 card.OnClicked = proj => OnProjectClicked?.Invoke(proj);
                 card.Bind(p);
             }
@@ -58,14 +56,13 @@ namespace Kyalio.Components
         public void BindEpisodes(IReadOnlyList<(string projectId, PlaylistItem item, int progressMs)> episodes,
             bool keepScroll = false)
         {
-            ReturnAllProjects();
-            ReturnAllEpisodes();
+            Clear();
 
             if (episodes == null) return;
             foreach (var ep in episodes)
             {
                 if (ep.item == null) continue;
-                var card = GetEpisodeCard();
+                var card = EpisodePool.Get();
                 card.OnClicked = (pid, item) => OnEpisodeClicked?.Invoke(pid, item);
                 card.Bind(ep.projectId, ep.item, ep.progressMs);
             }
@@ -75,8 +72,8 @@ namespace Kyalio.Components
 
         public void Clear()
         {
-            ReturnAllProjects();
-            ReturnAllEpisodes();
+            ProjectPool.ReturnAll();
+            EpisodePool.ReturnAll();
         }
 
         /// <summary>
@@ -93,67 +90,6 @@ namespace Kyalio.Components
                 LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
             if (!keepScroll)
                 scrollRect.verticalNormalizedPosition = 1f;
-        }
-
-        // ── Project card pool ─────────────────────────────────────────
-
-        private ProjectCard GetProjectCard()
-        {
-            ProjectCard card;
-            if (_projectPool.Count > 0)
-            {
-                card = _projectPool[^1];
-                _projectPool.RemoveAt(_projectPool.Count - 1);
-            }
-            else
-            {
-                card = Instantiate(projectCardPrefab, seriesContent);
-            }
-            card.gameObject.SetActive(true);
-            card.transform.SetAsLastSibling();
-            _projectActive.Add(card);
-            return card;
-        }
-
-        private void ReturnAllProjects()
-        {
-            foreach (var c in _projectActive)
-            {
-                c.CancelLoads();
-                c.gameObject.SetActive(false);
-                _projectPool.Add(c);
-            }
-            _projectActive.Clear();
-        }
-
-        // ── Episode card pool ─────────────────────────────────────────
-
-        private EpisodeCard GetEpisodeCard()
-        {
-            EpisodeCard card;
-            if (_episodePool.Count > 0)
-            {
-                card = _episodePool[^1];
-                _episodePool.RemoveAt(_episodePool.Count - 1);
-            }
-            else
-            {
-                card = Instantiate(episodeCardPrefab, seriesContent);
-            }
-            card.gameObject.SetActive(true);
-            card.transform.SetAsLastSibling();
-            _episodeActive.Add(card);
-            return card;
-        }
-
-        private void ReturnAllEpisodes()
-        {
-            foreach (var c in _episodeActive)
-            {
-                c.gameObject.SetActive(false);
-                _episodePool.Add(c);
-            }
-            _episodeActive.Clear();
         }
     }
 }

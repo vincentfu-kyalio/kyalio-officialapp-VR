@@ -115,7 +115,7 @@ namespace Kyalio.Components
                 new HomeMenuSelection { SelectionKind = HomeMenuSelection.Kind.Recommended });
 
             // Pre-select Latest Releases without firing event (subscribers not yet attached)
-            SetSelectedVisual(latestButton, true);
+            SelectedIndicator.Set(latestButton, true);
             _selectedButton = latestButton;
         }
 
@@ -126,7 +126,7 @@ namespace Kyalio.Components
             var text = button.GetComponentInChildren<TextMeshProUGUI>();
             if (text != null) text.text = label;
 
-            SetSelectedVisual(button, false);
+            SelectedIndicator.Set(button, false);
             button.onClick.AddListener(() => SelectItem(button, selection));
 
             _items.Add((button, selection));
@@ -142,23 +142,12 @@ namespace Kyalio.Components
         private void SetSelected(Button button, HomeMenuSelection selection)
         {
             if (_selectedButton != null)
-                SetSelectedVisual(_selectedButton, false);
+                SelectedIndicator.Set(_selectedButton, false);
 
             _selectedButton = button;
-            SetSelectedVisual(button, true);
+            SelectedIndicator.Set(button, true);
 
             CurrentSelection = selection;
-        }
-
-        /// <summary>
-        /// Looks for a child named "SelectedIndicator" on the button prefab and
-        /// shows or hides it. If the child doesn't exist, nothing happens.
-        /// </summary>
-        private static void SetSelectedVisual(Button button, bool selected)
-        {
-            var indicator = button.transform.Find("SelectedIndicator");
-            if (indicator != null)
-                indicator.gameObject.SetActive(selected);
         }
     }
 }

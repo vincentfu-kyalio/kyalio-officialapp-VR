@@ -75,7 +75,7 @@ namespace Kyalio.Components
             var text = button.GetComponentInChildren<TextMeshProUGUI>();
             if (text != null) text.text = role.Name;
 
-            SetSelectedVisual(button, false);
+            SelectedIndicator.Set(button, false);
             button.onClick.AddListener(() => SelectItem(button, role));
 
             _items.Add((button, role));
@@ -90,19 +90,12 @@ namespace Kyalio.Components
         private void SetSelected(Button button, HomeRoleItem role)
         {
             if (_selectedButton != null)
-                SetSelectedVisual(_selectedButton, false);
+                SelectedIndicator.Set(_selectedButton, false);
 
             _selectedButton = button;
-            SetSelectedVisual(button, true);
+            SelectedIndicator.Set(button, true);
 
             SelectedRole = role;
-        }
-
-        private static void SetSelectedVisual(Button button, bool selected)
-        {
-            var indicator = button.transform.Find("SelectedIndicator");
-            if (indicator != null)
-                indicator.gameObject.SetActive(selected);
         }
     }
 }

@@ -80,9 +80,9 @@ namespace Kyalio.Pages
 
             _activeTab = tab;
 
-            SetSelectedVisual(recentlyWatchedButton, tab == Tab.RecentlyWatched);
-            SetSelectedVisual(favoritesButton,       tab == Tab.Favorites);
-            SetSelectedVisual(downloadsButton,       tab == Tab.Downloads);
+            SelectedIndicator.Set(recentlyWatchedButton, tab == Tab.RecentlyWatched);
+            SelectedIndicator.Set(favoritesButton,       tab == Tab.Favorites);
+            SelectedIndicator.Set(downloadsButton,       tab == Tab.Downloads);
 
             if (recentlyWatchedPanel != null)
                 recentlyWatchedPanel.gameObject.SetActive(tab == Tab.RecentlyWatched);
@@ -105,13 +105,6 @@ namespace Kyalio.Pages
                     downloadsPanel?.OnEnter(null);
                     break;
             }
-        }
-
-        private static void SetSelectedVisual(Button button, bool selected)
-        {
-            var indicator = button.transform.Find("SelectedIndicator");
-            if (indicator != null)
-                indicator.gameObject.SetActive(selected);
         }
 
         // ── Recently Watched ──────────────────────────────────────────
@@ -186,9 +179,9 @@ namespace Kyalio.Pages
             _activeListPanel = null;
 
             _activeTab = Tab.RecentlyWatched;
-            SetSelectedVisual(recentlyWatchedButton, true);
-            SetSelectedVisual(favoritesButton,       false);
-            SetSelectedVisual(downloadsButton,       false);
+            SelectedIndicator.Set(recentlyWatchedButton, true);
+            SelectedIndicator.Set(favoritesButton,       false);
+            SelectedIndicator.Set(downloadsButton,       false);
             if (recentlyWatchedPanel != null) recentlyWatchedPanel.gameObject.SetActive(true);
             if (favoritesPanel != null)       favoritesPanel.gameObject.SetActive(false);
             if (downloadsPanel != null)       downloadsPanel.gameObject.SetActive(false);

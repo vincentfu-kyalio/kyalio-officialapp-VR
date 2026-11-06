@@ -16,8 +16,8 @@ namespace Kyalio.Components
         [SerializeField] private Transform container;
         [SerializeField] private ScrollRect scrollRect;
 
-        private readonly List<ProjectCard> _pool = new();
-        private readonly List<ProjectCard> _active = new();
+        private CardPool<ProjectCard> _pool;
+        private CardPool<ProjectCard> Pool => _pool ??= new(cardPrefab, container, c => c.CancelLoads());
 
         // Click callback, set by the page script
         public System.Action<Project> OnProjectClicked;
@@ -29,11 +29,11 @@ namespace Kyalio.Components
         /// </summary>
         public void Show(IReadOnlyList<Project> projects, bool keepScroll = false)
         {
-            ReturnAll();
+            Pool.ReturnAll();
 
             foreach (var project in projects)
             {
-                var card = GetCard();
+                var card = Pool.Get();
                 card.OnClicked = p => OnProjectClicked?.Invoke(p);
                 card.Bind(project);
             }
@@ -44,31 +44,7 @@ namespace Kyalio.Components
         /// <summary>
         /// Clears all cards and returns them to the object pool.
         /// </summary>
-        public void Clear() => ReturnAll();
-
-        // ── Object Pool ───────────────────────────────────────────────
-
-        private ProjectCard GetCard()
-        {
-            ProjectCard card;
-            if (_pool.Count > 0)
-            {
-                card = _pool[^1];
-                _pool.RemoveAt(_pool.Count - 1);
-            }
-            else
-            {
-                card = Instantiate(cardPrefab, container);
-            }
-
-            card.gameObject.SetActive(true);
-            // Keep hierarchy order aligned with data order so the layout group renders
-            // cards consistently. The pool returns cards LIFO, so without this the
-            // visible order would flip each time the same list is shown again.
-            card.transform.SetAsLastSibling();
-            _active.Add(card);
-            return card;
-        }
+        public void Clear() => Pool.ReturnAll();
 
         /// <summary>
         /// Forces the ScrollRect content to rebuild after its cards change and,
@@ -84,17 +60,6 @@ namespace Kyalio.Components
                 LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
             if (!keepScroll)
                 scrollRect.verticalNormalizedPosition = 1f;
-        }
-
-        private void ReturnAll()
-        {
-            foreach (var card in _active)
-            {
-                card.CancelLoads();
-                card.gameObject.SetActive(false);
-                _pool.Add(card);
-            }
-            _active.Clear();
         }
     }
 }

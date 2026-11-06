@@ -17,8 +17,8 @@ namespace Kyalio.Components
         [SerializeField] private Transform slideContent;
         [SerializeField] private RecentlyWatchedCard cardPrefab;
 
-        private readonly List<RecentlyWatchedCard> _pool   = new();
-        private readonly List<RecentlyWatchedCard> _active = new();
+        private CardPool<RecentlyWatchedCard> _pool;
+        private CardPool<RecentlyWatchedCard> Pool => _pool ??= new(cardPrefab, slideContent, c => c.CancelLoads());
 
         public System.Action<string> OnProjectClicked; // projectId
         public System.Action OnSeeAllClicked;
@@ -32,11 +32,11 @@ namespace Kyalio.Components
         public void Bind(string title, IReadOnlyList<WatchHistoryItem> items)
         {
             titleText.text = title;
-            ReturnAll();
+            Pool.ReturnAll();
 
             foreach (var item in items)
             {
-                var card = GetCard();
+                var card = Pool.Get();
                 card.OnClicked = (projectId, _) => OnProjectClicked?.Invoke(projectId);
                 card.Bind(item);
             }
@@ -45,35 +45,6 @@ namespace Kyalio.Components
                 seeAllButton.gameObject.SetActive(items.Count > 0);
         }
 
-        public void Clear() => ReturnAll();
-
-        private RecentlyWatchedCard GetCard()
-        {
-            RecentlyWatchedCard card;
-            if (_pool.Count > 0)
-            {
-                card = _pool[^1];
-                _pool.RemoveAt(_pool.Count - 1);
-            }
-            else
-            {
-                card = Instantiate(cardPrefab, slideContent);
-            }
-            card.gameObject.SetActive(true);
-            card.transform.SetAsLastSibling();
-            _active.Add(card);
-            return card;
-        }
-
-        private void ReturnAll()
-        {
-            foreach (var c in _active)
-            {
-                c.CancelLoads();
-                c.gameObject.SetActive(false);
-                _pool.Add(c);
-            }
-            _active.Clear();
-        }
+        public void Clear() => Pool.ReturnAll();
     }
 }

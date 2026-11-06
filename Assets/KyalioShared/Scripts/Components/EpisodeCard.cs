@@ -86,6 +86,13 @@ namespace Kyalio.Components
                 : $"{t.Minutes}m {t.Seconds:D2}s";
         }
 
+        /// <summary>Cancels the in-flight thumbnail load; call before returning the card to a pool.</summary>
+        public void CancelLoads()
+        {
+            _cts?.Cancel();
+            _cts = null;
+        }
+
         private void OnDestroy()
         {
             _cts?.Cancel();
