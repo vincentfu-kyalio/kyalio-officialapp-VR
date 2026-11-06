@@ -1,17 +1,28 @@
 fileFormatVersion: 2
 guid: fef09def6eba10436a91d1ccf15473aa
-timeCreated: 1510239370
-licenseType: Store
-PluginImporter:
+AssetOrigin:
   serializedVersion: 1
+  productId: 278896
+  packageName: AVPro Video v3 - Ultra Edition
+  packageVersion: 3.3.6
+  assetPath: Assets/AVProVideo/Runtime/Plugins/Android/libs/x86_64/libopusJNI.so
+  uploadId: 862136
+PluginImporter:
+  externalObjects: {}
+  serializedVersion: 3
   iconMap: {}
   executionOrder: {}
+  defineConstraints: []
   isPreloaded: 0
+  isOverridable: 0
+  isExplicitlyReferenced: 0
+  validateReferences: 1
   platformData:
     Android:
-      enabled: 1
+      enabled: 0
       settings:
-        CPU: X86_64
+        CPU: 
+        Is16KbAligned: false
     Any:
       enabled: 0
       settings: {}
@@ -22,10 +33,3 @@ PluginImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 278896
-  packageName: AVPro Video v3 - Ultra Edition
-  packageVersion: 3.3.6
-  assetPath: Assets/AVProVideo/Runtime/Plugins/Android/libs/x86_64/libopusJNI.so
-  uploadId: 862136
