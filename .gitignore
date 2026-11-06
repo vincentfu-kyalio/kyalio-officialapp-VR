@@ -117,3 +117,11 @@ Docs/**/*.gif
 # Android signing keystore (keep out of repo)
 *.keystore
 *.jks
+
+# IDE / local-only
+*.slnx
+.vscode/
+
+# Local-only assets (too large for the repo)
+/[Aa]ssets/kyalio_room(DontUpLoad)/
+/[Aa]ssets/kyalio_room(DontUpLoad).meta
