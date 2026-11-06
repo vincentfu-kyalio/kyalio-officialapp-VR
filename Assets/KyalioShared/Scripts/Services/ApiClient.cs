@@ -19,6 +19,12 @@ namespace Kyalio.Services
         public const string AppVersionHeader = "X-App-Version";
 
         /// <summary>
+        /// Per-request timeout. Without one a request on a dropped Wi-Fi link can hang
+        /// forever and leave the page spinning. Not applied to SSE, which stays open.
+        /// </summary>
+        public const int TimeoutSeconds = 30;
+
+        /// <summary>
         /// Fires when any endpoint returns 426 APP_VERSION_UNSUPPORTED. Subscribers should
         /// surface the forced-update UI and stop normal API flow. The originating call still
         /// throws <see cref="ApiException"/>; this is a side-channel notification.
@@ -166,6 +172,7 @@ namespace Kyalio.Services
             }
 
             req.downloadHandler = new DownloadHandlerBuffer();
+            req.timeout = TimeoutSeconds;
             req.SetRequestHeader("Accept", "application/json");
 
             var sentBearer = !string.IsNullOrEmpty(_token);
@@ -236,6 +243,7 @@ namespace Kyalio.Services
             }
 
             req.downloadHandler = new DownloadHandlerBuffer();
+            req.timeout = TimeoutSeconds;
 
             var sentBearer = !string.IsNullOrEmpty(_token);
             if (sentBearer)
