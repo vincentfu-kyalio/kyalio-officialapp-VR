@@ -108,6 +108,12 @@ namespace Kyalio.Pages
         private int _pendingResumeMs;
         private bool _preventSliderCallback;
 
+        // Last values pushed to the controls. The UI is rendered through the
+        // OVROverlayCanvas imposter, which redraws the whole canvas whenever anything
+        // on it changes, so Update only touches the UI when the visible value changes.
+        private int _shownCurrentSecond = -1;
+        private int _shownDurationSecond = -1;
+
         private float _watchSyncTimer;
         private string _knownProgressUpdatedAt;
 
@@ -191,7 +197,7 @@ namespace Kyalio.Pages
             if (duration > 0 && !_preventSliderCallback)
             {
                 _preventSliderCallback = true;
-                _progressSlider?.SetValueWithoutNotify((float)(current / duration));
+                UpdateProgressSlider((float)(current / duration));
                 _preventSliderCallback = false;
             }
 
@@ -722,15 +728,38 @@ namespace Kyalio.Pages
             if (_prevButton != null) _prevButton.interactable = state.HasPrev;
         }
 
-        private void UpdateTimeText(double current, double duration)
+        /// <summary>
+        /// Moves the scrub bar only once the change is at least a pixel wide: a long video
+        /// advances a fraction of a pixel per frame, and each change redraws the canvas.
+        /// </summary>
+        private void UpdateProgressSlider(float value)
         {
-            if (_currentTimeText != null) _currentTimeText.text = FormatTime(current);
-            if (_durationText != null) _durationText.text = FormatTime(duration);
+            if (_progressSlider == null) return;
+            var width = ((RectTransform)_progressSlider.transform).rect.width;
+            if (Mathf.Abs(value - _progressSlider.value) * width < 1f) return;
+            _progressSlider.SetValueWithoutNotify(value);
         }
 
-        private static string FormatTime(double totalSeconds)
+        /// <summary>Rewrites the time labels only when the displayed second changes (no per-frame string garbage).</summary>
+        private void UpdateTimeText(double current, double duration)
         {
-            if (totalSeconds < 0) totalSeconds = 0;
+            var currentSecond = (int)Math.Max(0, current);
+            var durationSecond = (int)Math.Max(0, duration);
+
+            if (currentSecond != _shownCurrentSecond && _currentTimeText != null)
+            {
+                _shownCurrentSecond = currentSecond;
+                _currentTimeText.text = FormatTime(currentSecond);
+            }
+            if (durationSecond != _shownDurationSecond && _durationText != null)
+            {
+                _shownDurationSecond = durationSecond;
+                _durationText.text = FormatTime(durationSecond);
+            }
+        }
+
+        private static string FormatTime(int totalSeconds)
+        {
             var t = TimeSpan.FromSeconds(totalSeconds);
             return t.TotalHours >= 1
                 ? $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}"
