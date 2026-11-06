@@ -21,6 +21,9 @@ namespace Kyalio.EditorTools
     ///                           The version code is rolled back if the build fails.
     /// Check Quest Build Setup — runs the setup checks without building.
     ///
+    /// Release builds are also blocked while a build scene has fake-data mode on
+    /// (AppBootstrapper / DevBootstrapper "_useFakeData"), so a dev setup cannot ship.
+    ///
     /// Output: Builds/SurgeryTraining_{yyyyMMdd}_{versionCode}[_dev].apk
     ///
     /// Keystore passwords come from environment variables so they never land in the repo:
@@ -65,7 +68,7 @@ namespace Kyalio.EditorTools
         [MenuItem("Build/Quest Release")]
         private static void BuildRelease()
         {
-            if (!Preflight(showWhenReady: false)) return;
+            if (!Preflight(showWhenReady: false, release: true)) return;
 
             var previousCode = PlayerSettings.Android.bundleVersionCode;
             var code = previousCode + 1;
@@ -107,13 +110,14 @@ namespace Kyalio.EditorTools
         }
 
         [MenuItem("Build/Check Quest Build Setup")]
-        private static void CheckSetup() => Preflight(showWhenReady: true);
+        private static void CheckSetup() => Preflight(showWhenReady: true, release: true);
 
         /// <summary>
         /// Checks build target, keystore and passwords. Shows a checklist with
         /// the exact fix for every failing item; applies signing settings when ready.
+        /// <paramref name="release"/> adds the checks that only matter for a Store build.
         /// </summary>
-        private static bool Preflight(bool showWhenReady)
+        private static bool Preflight(bool showWhenReady, bool release = false)
         {
             var lines = new List<string>();
             var fixes = new List<string>();
@@ -204,6 +208,22 @@ namespace Kyalio.EditorTools
                 }
             }
 
+            // Fake-data mode skips login and the API — fine for a dev build, never for the Store.
+            if (release)
+            {
+                var fakeDataScenes = FindFakeDataScenes();
+                if (fakeDataScenes.Count == 0)
+                {
+                    lines.Add("[✓] Fake data：關閉");
+                }
+                else
+                {
+                    ready = false;
+                    lines.Add($"[✗] Fake data：開啟中（{string.Join("、", fakeDataScenes)}）");
+                    fixes.Add("在場景的 AppBootstrapper（或 DevBootstrapper）取消勾選 Use Fake Data，並存檔場景。");
+                }
+            }
+
             var report = string.Join("\n", lines);
             if (fixes.Count > 0)
                 report += "\n\n要做的事：\n" + string.Join("\n", fixes.Select((f, i) => $"  {i + 1}. {f}"));
@@ -239,6 +259,18 @@ namespace Kyalio.EditorTools
         }
 
         private static string ProjectRoot => Path.GetDirectoryName(Application.dataPath);
+
+        /// <summary>
+        /// Enabled build scenes that have a "_useFakeData: 1" component. Reads the saved scene
+        /// files, which is what the build uses — an unsaved Inspector change does not count.
+        /// The field name is only used by AppBootstrapper and DevBootstrapper.
+        /// </summary>
+        private static List<string> FindFakeDataScenes() =>
+            EditorBuildSettings.scenes
+                .Where(s => s.enabled && File.Exists(s.path))
+                .Where(s => File.ReadAllText(s.path).Contains("_useFakeData: 1"))
+                .Select(s => Path.GetFileNameWithoutExtension(s.path))
+                .ToList();
 
         /// <summary>Resolves Player Settings' keystore name ("{inproject}: file" or an absolute path).</summary>
         private static string ResolveKeystorePath()
