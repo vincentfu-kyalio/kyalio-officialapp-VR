@@ -18,6 +18,9 @@ namespace Kyalio.Components
 
         public event System.Action<HomeRoleItem> OnRoleSelected;
 
+        /// <summary>Role selected last; kept across Build() so the page can restore it.</summary>
+        public HomeRoleItem SelectedRole { get; private set; }
+
         private readonly List<(Button button, HomeRoleItem role)> _items = new();
         private Button _selectedButton;
 
@@ -37,12 +40,19 @@ namespace Kyalio.Components
                 CreateItem(role);
         }
 
-        /// <summary>Programmatically selects the first role and fires OnRoleSelected.</summary>
-        public void SelectFirst()
+        /// <summary>
+        /// Highlights the role named <paramref name="roleName"/> without firing OnRoleSelected
+        /// (roles have no id; names are unique per home payload). Falls back to the first role
+        /// when it no longer exists. Returns the selected role, or null when there are none.
+        /// </summary>
+        public HomeRoleItem Restore(string roleName)
         {
-            if (_items.Count == 0) return;
-            var (btn, role) = _items[0];
-            SelectItem(btn, role);
+            if (_items.Count == 0) return null;
+
+            var index = _items.FindIndex(item => item.role.Name == roleName);
+            var (btn, role) = _items[index >= 0 ? index : 0];
+            SetSelected(btn, role);
+            return role;
         }
 
         // ── Private ───────────────────────────────────────────────────
@@ -62,13 +72,19 @@ namespace Kyalio.Components
 
         private void SelectItem(Button button, HomeRoleItem role)
         {
+            SetSelected(button, role);
+            OnRoleSelected?.Invoke(role);
+        }
+
+        private void SetSelected(Button button, HomeRoleItem role)
+        {
             if (_selectedButton != null)
                 SetSelectedVisual(_selectedButton, false);
 
             _selectedButton = button;
             SetSelectedVisual(button, true);
 
-            OnRoleSelected?.Invoke(role);
+            SelectedRole = role;
         }
 
         private static void SetSelectedVisual(Button button, bool selected)

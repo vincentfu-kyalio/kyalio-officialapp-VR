@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Kyalio.Models.V2;
 using TMPro;
 using UnityEngine;
@@ -15,6 +16,12 @@ namespace Kyalio.Components
         /// <summary>Specialty id (the "Category" kind now maps to a specialty filter).</summary>
         public string CategoryId;
         public string CategoryName;
+
+        /// <summary>Same menu item, compared by value (category buttons are rebuilt on every page entry).</summary>
+        public bool SameAs(HomeMenuSelection other) =>
+            other != null &&
+            SelectionKind == other.SelectionKind &&
+            (SelectionKind != Kind.Category || CategoryId == other.CategoryId);
     }
 
     /// <summary>
@@ -47,11 +54,15 @@ namespace Kyalio.Components
 
         public void BuildCategories(List<IdNameRef> categories)
         {
+            // Destroy() is deferred to end of frame, so drop the entries explicitly
+            // instead of relying on the destroyed buttons reading as null.
+            _items.RemoveAll(item => item.selection.SelectionKind == HomeMenuSelection.Kind.Category);
+            if (_selectedButton != null && _selectedButton.transform.parent == categoryContainer)
+                _selectedButton = null;
+
             // Remove previously built category buttons
             foreach (Transform child in categoryContainer)
                 Destroy(child.gameObject);
-
-            _items.RemoveAll(item => item.button == null);
 
             if (categories == null) return;
 
@@ -64,6 +75,21 @@ namespace Kyalio.Components
                     CategoryName  = cat.Name
                 });
             }
+        }
+
+        /// <summary>
+        /// Highlights the item matching <paramref name="selection"/> without firing OnSelectionChanged.
+        /// Falls back to Latest Releases when that item no longer exists (e.g. a removed category).
+        /// Returns the selection that ended up selected.
+        /// </summary>
+        public HomeMenuSelection Restore(HomeMenuSelection selection)
+        {
+            var match = _items.FirstOrDefault(item => item.selection.SameAs(selection));
+            if (match.button == null)
+                match = _items.First(item => item.selection.SelectionKind == HomeMenuSelection.Kind.LatestReleases);
+
+            SetSelected(match.button, match.selection);
+            return match.selection;
         }
 
         // ── Private ───────────────────────────────────────────────────
@@ -97,6 +123,12 @@ namespace Kyalio.Components
 
         private void SelectItem(Button button, HomeMenuSelection selection)
         {
+            SetSelected(button, selection);
+            OnSelectionChanged?.Invoke(selection);
+        }
+
+        private void SetSelected(Button button, HomeMenuSelection selection)
+        {
             if (_selectedButton != null)
                 SetSelectedVisual(_selectedButton, false);
 
@@ -104,7 +136,6 @@ namespace Kyalio.Components
             SetSelectedVisual(button, true);
 
             CurrentSelection = selection;
-            OnSelectionChanged?.Invoke(selection);
         }
 
         /// <summary>

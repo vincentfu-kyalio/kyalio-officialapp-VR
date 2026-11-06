@@ -33,8 +33,12 @@ namespace Kyalio.Components
 
         // ── Public API ────────────────────────────────────────────────
 
-        /// <summary>Projects mode — shows a ProjectCard per project.</summary>
-        public void Bind(IReadOnlyList<Project> projects)
+        /// <summary>
+        /// Projects mode — shows a ProjectCard per project and scrolls to the top.
+        /// Pass keepScroll when re-showing the same role (e.g. returning to the page):
+        /// Clear() leaves the content position untouched, so the user lands where they left.
+        /// </summary>
+        public void Bind(IReadOnlyList<Project> projects, bool keepScroll = false)
         {
             ReturnAllEpisodes();
             ReturnAllProjects();
@@ -47,11 +51,12 @@ namespace Kyalio.Components
                 card.Bind(p);
             }
 
-            RefreshLayout();
+            RefreshLayout(keepScroll);
         }
 
-        /// <summary>Episodes mode — shows an EpisodeCard per (project, video, progress).</summary>
-        public void BindEpisodes(IReadOnlyList<(string projectId, PlaylistItem item, int progressMs)> episodes)
+        /// <summary>Episodes mode — shows an EpisodeCard per (project, video, progress). keepScroll as in Bind.</summary>
+        public void BindEpisodes(IReadOnlyList<(string projectId, PlaylistItem item, int progressMs)> episodes,
+            bool keepScroll = false)
         {
             ReturnAllProjects();
             ReturnAllEpisodes();
@@ -65,7 +70,7 @@ namespace Kyalio.Components
                 card.Bind(ep.projectId, ep.item, ep.progressMs);
             }
 
-            RefreshLayout();
+            RefreshLayout(keepScroll);
         }
 
         public void Clear()
@@ -75,18 +80,19 @@ namespace Kyalio.Components
         }
 
         /// <summary>
-        /// Forces the ScrollRect content to rebuild after its cards change and
-        /// resets the scroll position to the top. seriesContent is nested inside
+        /// Forces the ScrollRect content to rebuild after its cards change and,
+        /// unless keepScroll, resets the scroll position to the top. seriesContent is nested inside
         /// the ScrollRect content, so rebuilding the outer content is what
         /// propagates the new size up to the ScrollRect — rebuilding only the
         /// inner container leaves the scroll view blank or clipped.
         /// </summary>
-        private void RefreshLayout()
+        private void RefreshLayout(bool keepScroll)
         {
             if (scrollRect == null) return;
             if (scrollRect.content != null)
                 LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
-            scrollRect.verticalNormalizedPosition = 1f;
+            if (!keepScroll)
+                scrollRect.verticalNormalizedPosition = 1f;
         }
 
         // ── Project card pool ─────────────────────────────────────────

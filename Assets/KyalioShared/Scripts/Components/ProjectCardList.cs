@@ -23,9 +23,11 @@ namespace Kyalio.Components
         public System.Action<Project> OnProjectClicked;
 
         /// <summary>
-        /// Displays the list of projects.
+        /// Displays the list of projects and scrolls to the top.
+        /// Pass keepScroll when re-showing the same projects (e.g. returning to a page):
+        /// Clear() leaves the content position untouched, so the user lands where they left.
         /// </summary>
-        public void Show(IReadOnlyList<Project> projects)
+        public void Show(IReadOnlyList<Project> projects, bool keepScroll = false)
         {
             ReturnAll();
 
@@ -36,7 +38,7 @@ namespace Kyalio.Components
                 card.Bind(project);
             }
 
-            RefreshLayout();
+            RefreshLayout(keepScroll);
         }
 
         /// <summary>
@@ -69,18 +71,19 @@ namespace Kyalio.Components
         }
 
         /// <summary>
-        /// Forces the ScrollRect content to rebuild after its cards change and
-        /// resets the scroll position to the top. The card container is nested
+        /// Forces the ScrollRect content to rebuild after its cards change and,
+        /// unless keepScroll, resets the scroll position to the top. The card container is nested
         /// inside the ScrollRect content, so rebuilding the outer content here is
         /// what propagates the new size up to the ScrollRect — rebuilding only the
         /// inner container leaves the scroll view blank or clipped.
         /// </summary>
-        private void RefreshLayout()
+        private void RefreshLayout(bool keepScroll)
         {
             if (scrollRect == null) return;
             if (scrollRect.content != null)
                 LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
-            scrollRect.verticalNormalizedPosition = 1f;
+            if (!keepScroll)
+                scrollRect.verticalNormalizedPosition = 1f;
         }
 
         private void ReturnAll()

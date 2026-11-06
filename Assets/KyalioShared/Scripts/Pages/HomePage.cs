@@ -38,11 +38,19 @@ namespace Kyalio.Pages
         {
             SetLoading(false);
 
-            if (menuPanel != null)
-                menuPanel.BuildCategories(ProjectCacheRepository.Instance.Specialties);
+            if (menuPanel == null)
+            {
+                ShowSelection(new HomeMenuSelection { SelectionKind = HomeMenuSelection.Kind.LatestReleases });
+                return;
+            }
 
-            // Always start on Latest Releases when entering the page
-            ShowSelection(new HomeMenuSelection { SelectionKind = HomeMenuSelection.Kind.LatestReleases });
+            menuPanel.BuildCategories(ProjectCacheRepository.Instance.Specialties);
+
+            // Return to the section and scroll position picked last (e.g. coming back from
+            // Project Info); Latest Releases at the top when that category is gone.
+            var previous = menuPanel.CurrentSelection;
+            var selection = menuPanel.Restore(previous);
+            ShowSelection(selection, keepScroll: selection.SameAs(previous));
         }
 
         public void OnExit()
@@ -57,7 +65,7 @@ namespace Kyalio.Pages
 
         private void OnMenuSelectionChanged(HomeMenuSelection selection) => ShowSelection(selection);
 
-        private void ShowSelection(HomeMenuSelection selection)
+        private void ShowSelection(HomeMenuSelection selection, bool keepScroll = false)
         {
             projectList.Clear();
 
@@ -68,12 +76,12 @@ namespace Kyalio.Pages
             {
                 case HomeMenuSelection.Kind.LatestReleases:
                     SetTitle("Latest Releases", "latest");
-                    projectList.Show(repo.Hydrate(home?.Latest));
+                    projectList.Show(repo.Hydrate(home?.Latest), keepScroll);
                     break;
 
                 case HomeMenuSelection.Kind.Recommended:
                     SetTitle("Recommended", "recommended");
-                    projectList.Show(repo.Hydrate(home?.Recommended));
+                    projectList.Show(repo.Hydrate(home?.Recommended), keepScroll);
                     break;
 
                 case HomeMenuSelection.Kind.Category:
@@ -81,7 +89,7 @@ namespace Kyalio.Pages
                     var projects = repo.All
                         .Where(p => p.SpecialtyId == selection.CategoryId)
                         .ToList();
-                    projectList.Show(projects);
+                    projectList.Show(projects, keepScroll);
                     break;
             }
         }

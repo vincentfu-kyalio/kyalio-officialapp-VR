@@ -52,9 +52,13 @@ namespace Kyalio.Pages
 
         public void OnEnter(object param)
         {
-            if (DevFlags.UseFakeData) { LoadFakeData(); return; }
+            // Fake data only covers Recently Watched here; Favorites / Downloads panels
+            // handle fake mode in their own OnEnter.
+            if (DevFlags.UseFakeData && _activeTab == Tab.RecentlyWatched) { LoadFakeData(); return; }
 
-            SelectTab(Tab.RecentlyWatched);
+            // Return to the tab picked last (e.g. coming back from Project Info);
+            // Recently Watched on first entry. Panels keep their scroll while hidden.
+            SelectTab(_activeTab);
         }
 
         public void OnExit()

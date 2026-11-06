@@ -43,8 +43,15 @@ namespace Kyalio.Pages
             _displayMode = roles?.DisplayMode ?? HomeRolesDisplayMode.Projects;
 
             rightSection?.Clear();
-            rolePanel?.Build(roles?.Items ?? new List<HomeRoleItem>());
-            rolePanel?.SelectFirst();
+            if (rolePanel == null) return;
+
+            // Return to the role and scroll position picked last (e.g. coming back from
+            // Project Info); the first role at the top on first entry or when that role is gone.
+            var previous = rolePanel.SelectedRole?.Name;
+            rolePanel.Build(roles?.Items ?? new List<HomeRoleItem>());
+            var role = rolePanel.Restore(previous);
+            if (role != null)
+                ShowRole(role, keepScroll: role.Name == previous);
         }
 
         public void OnExit() { }
@@ -54,7 +61,9 @@ namespace Kyalio.Pages
 
         // ── Role selection ────────────────────────────────────────────
 
-        private void OnRoleSelected(HomeRoleItem role)
+        private void OnRoleSelected(HomeRoleItem role) => ShowRole(role);
+
+        private void ShowRole(HomeRoleItem role, bool keepScroll = false)
         {
             if (rightPanelTitle != null)
                 rightPanelTitle.text = role.Name;
@@ -79,14 +88,14 @@ namespace Kyalio.Pages
                     if (item == null) continue;
                     episodes.Add((ep.ProjectId, item, repo.GetProgressMs(ep.VideoId)));
                 }
-                rightSection.BindEpisodes(episodes);
+                rightSection.BindEpisodes(episodes, keepScroll);
             }
             else
             {
                 rightSection.OnProjectClicked = p =>
                     UIManager.Instance.GoTo(PageType.ProjectInfo,
                         new Kyalio.Models.ProjectNavParam { ProjectId = p.ProjectId, Source = ProjectPageSource.Roles });
-                rightSection.Bind(repo.Hydrate(role.ProjectIds));
+                rightSection.Bind(repo.Hydrate(role.ProjectIds), keepScroll);
             }
         }
     }
