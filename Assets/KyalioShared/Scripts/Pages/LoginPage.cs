@@ -25,7 +25,9 @@ namespace Kyalio.Pages
     ///   • Code — POST /api/pair/request → show 6 digits → SSE GET /api/pair/stream/{code}.
     ///     Pairing only runs while the code panel is visible.
     ///
-    /// Resume: on enter, a stored, unexpired credential (AuthStorage) skips the form.
+    /// Resume: when _resumeStoredSession is on, a stored, unexpired credential (AuthStorage)
+    /// skips the form. Off by default — every launch requires signing in, and any credential
+    /// left by an older build is cleared. Remember Me still pre-fills the form either way.
     /// After any successful sign-in the V2 sync triad runs (sync → batch → home → progress),
     /// then the page navigates to Home. Errors are shown through PopupManager.
     /// </summary>
@@ -55,6 +57,10 @@ namespace Kyalio.Pages
         [Header("Shared")]
         [SerializeField] private GameObject _loadingIndicator;
         [SerializeField] private GameObject _tabBarRoot;
+
+        [Header("Session")]
+        [Tooltip("Skip the login form on launch while a stored credential is still valid.")]
+        [SerializeField] private bool _resumeStoredSession = false;
 
         private CancellationTokenSource _cts;      // page lifetime
         private CancellationTokenSource _pairCts;  // code-mode lifetime (child of _cts)
@@ -86,7 +92,11 @@ namespace Kyalio.Pages
             if (_tabBarRoot != null)
                 _tabBarRoot.SetActive(false);
 
-            if (AuthStorage.TryGetValidToken(out var storedToken))
+            if (!_resumeStoredSession)
+            {
+                AuthStorage.ClearCredential();
+            }
+            else if (AuthStorage.TryGetValidToken(out var storedToken))
             {
                 ResumeStoredSession(storedToken);
                 return;
@@ -370,7 +380,8 @@ namespace Kyalio.Pages
             Debug.Log("[LoginPage] Credential received — setting token.");
             StopPairing();
             ServiceLocator.Instance.ApiClient.SetToken(credential.AccessToken);
-            AuthStorage.SaveCredential(credential);
+            if (_resumeStoredSession)
+                AuthStorage.SaveCredential(credential);
             AppState.Instance.SetLoggedIn();
             BootstrapSessionAndProceedAsync(successMessage, ct).Forget();
         }
