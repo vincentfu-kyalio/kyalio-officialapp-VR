@@ -60,6 +60,11 @@ namespace Kyalio.Pages
         private bool _isEditMode;
         private readonly List<string> _selectedIds = new();
         private readonly List<SelectableListItem> _items = new();
+
+        // Items are reused across reloads instead of Instantiate / Destroy each time.
+        private CardPool<SelectableListItem> _itemPool;
+        private CardPool<SelectableListItem> ItemPool =>
+            _itemPool ??= new(itemPrefab, listContainer, i => i.CancelLoads(), destroyExisting: true);
         private CancellationTokenSource _cts;
 
         // ── Unity lifecycle ───────────────────────────────────────────
@@ -209,7 +214,7 @@ namespace Kyalio.Pages
         private void SpawnItem(string projectId, string title, string category,
             string drName, string thumbnailUrl, string programPicUrl, int videoCount, bool prefixWithDr)
         {
-            var item = Instantiate(itemPrefab, listContainer);
+            var item = ItemPool.Get();
             item.OnSelectionChanged = OnItemSelectionChanged;
             item.OnItemClicked = pid => UIManager.Instance.GoTo(PageType.ProjectInfo,
                 new Kyalio.Models.ProjectNavParam { ProjectId = pid, Source = ProjectPageSource.Favorites });
@@ -227,8 +232,7 @@ namespace Kyalio.Pages
 
         private void ClearList()
         {
-            foreach (Transform child in listContainer)
-                Destroy(child.gameObject);
+            ItemPool.ReturnAll();
             _items.Clear();
             _selectedIds.Clear();
         }

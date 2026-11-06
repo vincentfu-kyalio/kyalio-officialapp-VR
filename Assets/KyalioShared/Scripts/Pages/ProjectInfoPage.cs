@@ -47,6 +47,11 @@ namespace Kyalio.Pages
         [Header("Playlist")]
         [SerializeField] private Transform playlistContainer;
         [SerializeField] private PlaylistItemRow playlistItemPrefab;
+
+        // Rows are reused across project entries instead of Instantiate / Destroy each time.
+        private CardPool<PlaylistItemRow> _rowPool;
+        private CardPool<PlaylistItemRow> RowPool =>
+            _rowPool ??= new(playlistItemPrefab, playlistContainer, r => r.Release(), destroyExisting: true);
         [SerializeField] private TextMeshProUGUI playlistCountText;
 
         [Header("Progress")]
@@ -231,7 +236,7 @@ namespace Kyalio.Pages
 
             foreach (var item in playlist)
             {
-                var row = Instantiate(playlistItemPrefab, playlistContainer);
+                var row = RowPool.Get();
                 row.OnClicked = playlistItem =>
                 {
                     _videoStarted = true;
@@ -607,13 +612,7 @@ namespace Kyalio.Pages
         private void ClearPlaylistRows()
         {
             if (playlistContainer == null) return;
-
-            for (int i = playlistContainer.childCount - 1; i >= 0; i--)
-            {
-                var child = playlistContainer.GetChild(i);
-                if (child.TryGetComponent<PlaylistItemRow>(out _))
-                    Destroy(child.gameObject);
-            }
+            RowPool.ReturnAll();
         }
 
         // ── Helpers ───────────────────────────────────────────────────

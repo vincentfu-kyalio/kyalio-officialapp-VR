@@ -69,9 +69,16 @@ namespace Kyalio.Components
             HandleDownloadClickAsync().Forget();
         }
 
-        private void OnDestroy()
+        private void OnDestroy() => Release();
+
+        /// <summary>
+        /// Cancels the thumbnail load and stops listening to download events;
+        /// call before returning the row to a pool. Bind() re-subscribes.
+        /// </summary>
+        public void Release()
         {
             _cts?.Cancel();
+            _cts = null;
             UnsubscribeDownloadEvents();
         }
 

@@ -128,6 +128,13 @@ namespace Kyalio.Components
             }
         }
 
+        /// <summary>Cancels in-flight image loads; call before returning the item to a pool.</summary>
+        public void CancelLoads()
+        {
+            _cts?.Cancel();
+            _cts = null;
+        }
+
         private void OnDestroy()
         {
             _cts?.Cancel();
