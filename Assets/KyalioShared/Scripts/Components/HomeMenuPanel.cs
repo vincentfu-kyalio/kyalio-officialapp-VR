@@ -44,6 +44,9 @@ namespace Kyalio.Components
         private readonly List<(Button button, HomeMenuSelection selection)> _items = new();
         private Button _selectedButton;
 
+        private List<IdNameRef> _builtCategories;
+        private bool _categoriesBuilt;
+
         private void Awake()
         {
             CurrentSelection = new HomeMenuSelection { SelectionKind = HomeMenuSelection.Kind.LatestReleases };
@@ -52,8 +55,17 @@ namespace Kyalio.Components
 
         // ── Public API ────────────────────────────────────────────────
 
+        /// <summary>
+        /// Rebuilds the category buttons when the list changed. The specialty list is only
+        /// replaced on login (AppState.SetHome), so re-entering the page with the same list
+        /// is a no-op — no Instantiate/Destroy hitch on every navigation.
+        /// </summary>
         public void BuildCategories(List<IdNameRef> categories)
         {
+            if (_categoriesBuilt && ReferenceEquals(categories, _builtCategories)) return;
+            _builtCategories = categories;
+            _categoriesBuilt = true;
+
             // Destroy() is deferred to end of frame, so drop the entries explicitly
             // instead of relying on the destroyed buttons reading as null.
             _items.RemoveAll(item => item.selection.SelectionKind == HomeMenuSelection.Kind.Category);

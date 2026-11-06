@@ -48,7 +48,8 @@ namespace Kyalio.Pages
             // Return to the role and scroll position picked last (e.g. coming back from
             // Project Info); the first role at the top on first entry or when that role is gone.
             var previous = rolePanel.SelectedRole?.Name;
-            rolePanel.Build(roles?.Items ?? new List<HomeRoleItem>());
+            // Pass the list itself (not a fresh fallback) so Build can skip unchanged roles.
+            rolePanel.Build(roles?.Items);
             var role = rolePanel.Restore(previous);
             if (role != null)
                 ShowRole(role, keepScroll: role.Name == previous);

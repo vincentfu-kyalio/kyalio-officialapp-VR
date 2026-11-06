@@ -24,11 +24,22 @@ namespace Kyalio.Components
         private readonly List<(Button button, HomeRoleItem role)> _items = new();
         private Button _selectedButton;
 
+        private List<HomeRoleItem> _builtRoles;
+        private bool _built;
+
         // ── Public API ────────────────────────────────────────────────
 
-        /// <summary>Clears and rebuilds the role list.</summary>
+        /// <summary>
+        /// Clears and rebuilds the role list when it changed. The roles come from
+        /// AppState.LastHome, which is only replaced on login, so re-entering the page
+        /// with the same list is a no-op.
+        /// </summary>
         public void Build(List<HomeRoleItem> roles)
         {
+            if (_built && ReferenceEquals(roles, _builtRoles)) return;
+            _builtRoles = roles;
+            _built = true;
+
             foreach (var (btn, _) in _items)
                 if (btn != null) Destroy(btn.gameObject);
             _items.Clear();
