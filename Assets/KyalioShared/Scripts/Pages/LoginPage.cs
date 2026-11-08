@@ -77,6 +77,9 @@ namespace Kyalio.Pages
             if (_usePasswordButton != null)    _usePasswordButton.onClick.AddListener(() => SetMode(Mode.Password));
             if (_showPasswordToggle != null)   _showPasswordToggle.onValueChanged.AddListener(ApplyPasswordVisibility);
             if (_rememberToggle != null)       _rememberToggle.onValueChanged.AddListener(OnRememberChanged);
+            SystemKeyboardInput.EnsureOn(_emailInput);
+            SystemKeyboardInput.EnsureOn(_passwordInput);
+
             // No onSubmit → login: the Quest system keyboard reports Status.Done on any
             // close (checkmark or hide), and TMP turns Done into onSubmit, so dismissing
             // the keyboard would sign in. Login is triggered only by the Login button.
