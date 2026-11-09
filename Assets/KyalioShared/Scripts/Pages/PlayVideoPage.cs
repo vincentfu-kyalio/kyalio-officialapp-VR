@@ -321,11 +321,10 @@ namespace Kyalio.Pages
                 return;
             }
 
-            // 2. Dev mode — no API available
+            // 2. Dev mode — no API available; fall back to the dev test video
             if (DevFlags.UseFakeData)
             {
-                Debug.LogWarning(
-                    "[PlayVideoPage] No local download found; skipping stream fetch in dev mode.");
+                OpenDevVideo(resumeMs);
                 return;
             }
 
@@ -354,10 +353,32 @@ namespace Kyalio.Pages
         }
 
         /// <summary>Opens media at the given path and stores the resume position.</summary>
-        private void OpenMedia(string path, int resumeMs)
+        private void OpenMedia(string path, int resumeMs,
+            MediaPathType pathType = MediaPathType.AbsolutePathOrURL)
         {
             _pendingResumeMs = resumeMs;
-            _mediaPlayer.OpenMedia(MediaPathType.AbsolutePathOrURL, path, autoPlay: false);
+            _mediaPlayer.OpenMedia(pathType, path, autoPlay: false);
+        }
+
+        /// <summary>
+        /// Fake-data mode has no stream API, so play DevFlags.DevVideoPath instead,
+        /// letting the controls be exercised in the Editor without signing in.
+        /// </summary>
+        private void OpenDevVideo(int resumeMs)
+        {
+            string path = DevFlags.DevVideoPath;
+            if (string.IsNullOrEmpty(path))
+            {
+                Debug.LogWarning(
+                    "[PlayVideoPage] No local download and no dev video path; nothing to play.");
+                return;
+            }
+
+            // Let AVPro resolve StreamingAssets itself (Android's path is inside the APK).
+            bool absolute = path.Contains("://") || System.IO.Path.IsPathRooted(path);
+            OpenMedia(path, resumeMs, absolute
+                ? MediaPathType.AbsolutePathOrURL
+                : MediaPathType.RelativeToStreamingAssetsFolder);
         }
 
         private async UniTask RefreshStreamUrlAsync(CancellationToken ct)
