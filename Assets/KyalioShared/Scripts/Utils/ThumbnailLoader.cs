@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Core;
 using Kyalio.Services;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
@@ -18,13 +19,19 @@ namespace Kyalio.Utils
     /// cannot leave the other cards with the same URL blank.
     ///
     /// When the cache is full the least recently used sprite is destroyed, unless an Image
-    /// registered through <see cref="Track"/> still shows it. Lists are not virtualised
-    /// (every card of a long list is alive at once), so an untracked eviction would blank
-    /// cards that are on screen.
+    /// registered through <see cref="Track"/> still shows it, so eviction never blanks a
+    /// card that is on screen.
+    ///
+    /// At most one texture is created per frame: decoding and uploading is main-thread
+    /// work, and a row of cards scrolling into a virtualised list would otherwise stack
+    /// several of them into one long frame.
     /// </summary>
     public static class ThumbnailLoader
     {
         private const int MaxCacheSize = 60;
+
+        private static readonly ProfilerMarker s_createTexture = new("ThumbnailLoader.CreateTexture");
+        private static readonly ProfilerMarker s_addToCache    = new("ThumbnailLoader.AddToCache");
 
         // Limits simultaneous HTTP downloads so 4K video streaming is not starved for bandwidth.
         private static readonly SemaphoreSlim _concurrencyLimit = new(4, 4);
@@ -159,14 +166,24 @@ namespace Kyalio.Utils
                     return;
                 }
 
-                var tex = DownloadHandlerTexture.GetContent(req);
-                var sprite = Sprite.Create(
-                    tex,
-                    new Rect(0, 0, tex.width, tex.height),
-                    new Vector2(0.5f, 0.5f)
-                );
+                // Turning the bytes into a GPU texture is main-thread work; several downloads
+                // finishing together (a row scrolling into a virtualised list) would stack it
+                // into one long frame.
+                await WaitForCreateSlotAsync(ct);
 
-                AddToCache(url, sprite);
+                Sprite sprite;
+                using (s_createTexture.Auto())
+                {
+                    var tex = DownloadHandlerTexture.GetContent(req);
+                    sprite = Sprite.Create(
+                        tex,
+                        new Rect(0, 0, tex.width, tex.height),
+                        new Vector2(0.5f, 0.5f)
+                    );
+                }
+
+                using (s_addToCache.Auto())
+                    AddToCache(url, sprite);
                 Finish(url, load, sprite);
             }
             catch (OperationCanceledException)
@@ -182,6 +199,16 @@ namespace Kyalio.Utils
             {
                 _concurrencyLimit.Release();
             }
+        }
+
+        // At most one texture is created per frame.
+        private static int _lastCreateFrame = -1;
+
+        private static async UniTask WaitForCreateSlotAsync(CancellationToken ct)
+        {
+            while (Time.frameCount == _lastCreateFrame)
+                await UniTask.Yield(PlayerLoopTiming.Update, ct);
+            _lastCreateFrame = Time.frameCount;
         }
 
         private static void Finish(string url, PendingLoad load, Sprite sprite, bool cancelled = false)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -21,6 +22,11 @@ namespace Kyalio.Components
     /// </summary>
     public class VirtualGrid<T> : IDisposable where T : Component
     {
+        private static readonly ProfilerMarker s_refresh = new("VirtualGrid.Refresh");
+        private static readonly ProfilerMarker s_bind    = new("VirtualGrid.Bind");
+        private static readonly ProfilerMarker s_create  = new("VirtualGrid.CreateCard");
+        private static readonly ProfilerMarker s_hide    = new("VirtualGrid.HideSpare");
+
         private readonly RectTransform _rect;
         private readonly T _prefab;
         private readonly GridLayoutGroup _grid;
@@ -185,6 +191,8 @@ namespace Kyalio.Components
         /// </summary>
         private void Refresh(bool force = false)
         {
+            using var scope = s_refresh.Auto();
+
             // An empty grid sharing its container must not overwrite the other grid's height.
             if (_count > 0 && !Mathf.Approximately(_rect.rect.width, _layoutWidth))
             {
@@ -221,7 +229,7 @@ namespace Kyalio.Components
                         _shown[i] = card;
                     }
                     Place(card, i);
-                    _bind(card, i);
+                    using (s_bind.Auto()) _bind(card, i);
                 }
             }
 
@@ -229,6 +237,7 @@ namespace Kyalio.Components
             foreach (var card in _spare)
                 if (card.gameObject.activeSelf)
                 {
+                    using var hide = s_hide.Auto();
                     _onHide?.Invoke(card);
                     card.gameObject.SetActive(false);
                 }
@@ -250,6 +259,7 @@ namespace Kyalio.Components
             }
             else
             {
+                using var create = s_create.Auto();
                 card = Object.Instantiate(_prefab, _rect);
                 _onCreate?.Invoke(card);
             }
