@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Kyalio.Core
 {
@@ -11,7 +12,14 @@ namespace Kyalio.Core
     ///   UIManager.Instance.GoBack();
     ///
     /// Inspector: assign each PageType → IPageHandler MonoBehaviour in the Pages array.
-    /// All registered page GameObjects are hidden on Awake; UIManager controls visibility.
+    /// All registered pages are hidden on Awake; UIManager controls visibility.
+    ///
+    /// Pages flagged hideWithCanvas stay active and are hidden by disabling their own
+    /// nested Canvas instead. Toggling a GameObject re-runs OnEnable/OnDisable on every
+    /// graphic below it, which rebuilds all of its meshes and layouts — a visible hitch
+    /// on content-heavy pages. Disabling a Canvas only stops drawing it. Flag pages
+    /// with no per-frame logic of their own (e.g. the tab pages); a flagged page also
+    /// runs Awake at startup instead of on first visit.
     /// </summary>
     public class UIManager : MonoBehaviour
     {
@@ -24,9 +32,18 @@ namespace Kyalio.Core
         {
             public PageType pageType;
             public GameObject pageObject;
+            [Tooltip("Hide by disabling a nested Canvas instead of deactivating the GameObject.")]
+            public bool hideWithCanvas;
+        }
+
+        private class CanvasToggle
+        {
+            public Canvas Canvas;
+            public GraphicRaycaster Raycaster;
         }
 
         private readonly Dictionary<PageType, IPageHandler> _pageMap = new();
+        private readonly Dictionary<PageType, CanvasToggle> _canvasPages = new();
         private readonly Stack<PageType> _history = new();
         private PageType? _currentPage;
 
@@ -51,7 +68,17 @@ namespace Kyalio.Core
                 if (handler != null)
                 {
                     _pageMap[entry.pageType] = handler;
-                    entry.pageObject.SetActive(false);
+                    if (entry.hideWithCanvas)
+                    {
+                        var toggle = CreateCanvasToggle(entry.pageObject);
+                        _canvasPages[entry.pageType] = toggle;
+                        SetCanvasVisible(toggle, false);
+                        entry.pageObject.SetActive(true);
+                    }
+                    else
+                    {
+                        entry.pageObject.SetActive(false);
+                    }
                 }
                 else
                 {
@@ -145,7 +172,10 @@ namespace Kyalio.Core
                 Debug.LogError($"[UIManager] No handler registered for {pageType}.");
                 return;
             }
-            ((MonoBehaviour)handler).gameObject.SetActive(true);
+            if (_canvasPages.TryGetValue(pageType, out var toggle))
+                SetCanvasVisible(toggle, true);
+            else
+                ((MonoBehaviour)handler).gameObject.SetActive(true);
             handler.OnEnter(param);
         }
 
@@ -153,7 +183,44 @@ namespace Kyalio.Core
         {
             if (!_pageMap.TryGetValue(pageType, out var handler)) return;
             handler.OnExit();
-            ((MonoBehaviour)handler).gameObject.SetActive(false);
+            if (_canvasPages.TryGetValue(pageType, out var toggle))
+                SetCanvasVisible(toggle, false);
+            else
+                ((MonoBehaviour)handler).gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// Gives the page its own nested Canvas (drawn in hierarchy order, like before) and a
+        /// GraphicRaycaster, since a GraphicRaycaster only hits graphics of its own Canvas.
+        /// </summary>
+        private static CanvasToggle CreateCanvasToggle(GameObject page)
+        {
+            var parent = page.transform.parent != null
+                ? page.transform.parent.GetComponentInParent<Canvas>(includeInactive: true)
+                : null;
+
+            if (!page.TryGetComponent<Canvas>(out var canvas))
+                canvas = page.AddComponent<Canvas>();
+            if (parent != null)
+                canvas.additionalShaderChannels = parent.additionalShaderChannels; // TMP needs these
+
+            if (!page.TryGetComponent<GraphicRaycaster>(out var raycaster))
+            {
+                raycaster = page.AddComponent<GraphicRaycaster>();
+                if (parent != null && parent.TryGetComponent<GraphicRaycaster>(out var parentRaycaster))
+                {
+                    raycaster.ignoreReversedGraphics = parentRaycaster.ignoreReversedGraphics;
+                    raycaster.blockingObjects = parentRaycaster.blockingObjects;
+                }
+            }
+
+            return new CanvasToggle { Canvas = canvas, Raycaster = raycaster };
+        }
+
+        private static void SetCanvasVisible(CanvasToggle toggle, bool visible)
+        {
+            toggle.Canvas.enabled = visible;
+            toggle.Raycaster.enabled = visible;
         }
     }
 }

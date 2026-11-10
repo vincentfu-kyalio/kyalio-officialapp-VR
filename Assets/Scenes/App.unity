@@ -11497,12 +11497,16 @@ MonoBehaviour:
     pageObject: {fileID: 8156822433398620956}
   - pageType: 1
     pageObject: {fileID: 7801668266889797485}
+    hideWithCanvas: 1
   - pageType: 2
     pageObject: {fileID: 7235869608504660358}
+    hideWithCanvas: 1
   - pageType: 3
     pageObject: {fileID: 6500273102990551285}
+    hideWithCanvas: 1
   - pageType: 4
     pageObject: {fileID: 4361224526894847911}
+    hideWithCanvas: 1
   - pageType: 5
     pageObject: {fileID: 711373613934077491}
   - pageType: 8
