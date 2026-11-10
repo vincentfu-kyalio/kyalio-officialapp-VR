@@ -73,18 +73,38 @@ namespace Kyalio.Components
 
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
-            var thumbUrl = video?.ThumbnailUrl ?? project?.ThumbnailUrl;
+            var thumbUrl = ThumbnailUrlFor(item);
             if (!string.IsNullOrEmpty(thumbUrl))
-                LoadThumbnailAsync(ThumbnailLoader.Resolve(thumbUrl), _cts.Token).Forget();
+                LoadThumbnailAsync(thumbUrl, _cts.Token).Forget();
 
             if (programLogo != null)
             {
-                var picUrl = repo.GetFirstProgram(project)?.PicUrl;
+                var picUrl = ProgramLogoUrlFor(item);
                 programLogo.sprite = null;
                 programLogo.gameObject.SetActive(!string.IsNullOrEmpty(picUrl));
                 if (!string.IsNullOrEmpty(picUrl))
-                    LoadProgramLogoAsync(ThumbnailLoader.Resolve(picUrl), _cts.Token).Forget();
+                    LoadProgramLogoAsync(picUrl, _cts.Token).Forget();
             }
+        }
+
+        /// <summary>
+        /// Resolved thumbnail URL a card shows for this item: the watched episode's own
+        /// thumbnail, falling back to the project's. Null when there is none.
+        /// </summary>
+        public static string ThumbnailUrlFor(WatchHistoryItem item)
+        {
+            var repo = ProjectCacheRepository.Instance;
+            var url  = repo.GetVideo(item.ProjectId, item.VideoId)?.ThumbnailUrl
+                       ?? repo.Get(item.ProjectId)?.ThumbnailUrl;
+            return string.IsNullOrEmpty(url) ? null : ThumbnailLoader.Resolve(url);
+        }
+
+        /// <summary>Resolved program logo URL a card shows for this item, or null.</summary>
+        public static string ProgramLogoUrlFor(WatchHistoryItem item)
+        {
+            var repo = ProjectCacheRepository.Instance;
+            var url  = repo.GetFirstProgram(repo.Get(item.ProjectId))?.PicUrl;
+            return string.IsNullOrEmpty(url) ? null : ThumbnailLoader.Resolve(url);
         }
 
         public void CancelLoads()

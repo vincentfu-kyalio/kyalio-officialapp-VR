@@ -117,6 +117,21 @@ namespace Kyalio.Utils
             }
         }
 
+        /// <summary>
+        /// Loads URLs into the cache in the background, one at a time and only while no
+        /// other load is in flight, so it never holds up thumbnails a card on screen is
+        /// waiting for. A card asking for a URL being prefetched joins that download.
+        /// </summary>
+        public static async UniTask PrefetchAsync(IEnumerable<string> urls, CancellationToken ct)
+        {
+            foreach (var url in urls)
+            {
+                if (string.IsNullOrEmpty(url) || _cache.ContainsKey(url)) continue;
+                await UniTask.WaitUntil(() => _pending.Count == 0, cancellationToken: ct);
+                await LoadAsync(url, ct);
+            }
+        }
+
         public static void ClearCache()
         {
             foreach (var (_, sprite) in _lruList)
