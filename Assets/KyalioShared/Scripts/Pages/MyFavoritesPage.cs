@@ -71,6 +71,7 @@ namespace Kyalio.Pages
 
         private VirtualGrid<SelectableListItem> _grid;
         private CancellationTokenSource _cts;
+        private List<FavoriteItem> _boundFavorites;   // the list the rows were built from
 
         // Created lazily: the panel may be bound before its Awake has run.
         private VirtualGrid<SelectableListItem> Grid
@@ -135,11 +136,16 @@ namespace Kyalio.Pages
                 return;
             }
 
-            // Favorites: skip reload when cache is fresh
-            if (_mode == ListMode.Favorites &&
-                !AppState.Instance.FavoritesDirty &&
-                _rows.Count > 0)
-                return;
+            // Favorites: show the list from AppState at once (usually prefetched after
+            // login), and fetch only when it is missing or marked dirty. A null list (new
+            // session) clears the previous account's rows.
+            if (_mode == ListMode.Favorites)
+            {
+                var state  = AppState.Instance;
+                var cached = state.Favorites;
+                if (cached != _boundFavorites) BindFavoriteItems(cached);
+                if (cached != null && !state.FavoritesDirty) return;
+            }
 
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
@@ -171,18 +177,25 @@ namespace Kyalio.Pages
 
         private async UniTask LoadFavoritesAsync(CancellationToken ct)
         {
-            var response = await ServiceLocator.Instance.V2.Favorites.GetFavoritesAsync(ct);
+            // Joins the post-login prefetch if it is still running.
+            var fresh = await MyKyalioLoader.FetchFavoritesAsync().AttachExternalCancellation(ct);
             if (ct.IsCancellationRequested) return;
 
-            var items = response?.Items;
-            if (items == null) return;
+            if (SameFavorites(_boundFavorites, fresh)) _boundFavorites = fresh;
+            else BindFavoriteItems(fresh);
+        }
 
-            BindFavoriteItems(items);
-            AppState.Instance.ClearFavoritesDirty();
+        private static bool SameFavorites(List<FavoriteItem> a, List<FavoriteItem> b)
+        {
+            if (a == null || b == null || a.Count != b.Count) return false;
+            for (int i = 0; i < a.Count; i++)
+                if (a[i].ProjectId != b[i].ProjectId) return false;
+            return true;
         }
 
         private void BindFavoriteItems(List<FavoriteItem> items)
         {
+            _boundFavorites = items;
             BeginList();
             var repo = ProjectCacheRepository.Instance;
             int count = 0;

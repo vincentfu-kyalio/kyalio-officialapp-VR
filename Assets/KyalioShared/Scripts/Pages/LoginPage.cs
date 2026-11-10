@@ -442,9 +442,9 @@ namespace Kyalio.Pages
             if (ct.IsCancellationRequested || string.IsNullOrEmpty(ServiceLocator.Instance.ApiClient.Token))
                 return;
 
-            // Background: My Kyalio's list and first thumbnails are ready before it opens.
+            // Background: My Kyalio's lists and first thumbnails are ready before it opens.
             // Its thumbnails wait for Home's, so Home is not slowed down.
-            WatchHistoryLoader.Prefetch();
+            MyKyalioLoader.Prefetch();
 
             SetBusy(false);
 

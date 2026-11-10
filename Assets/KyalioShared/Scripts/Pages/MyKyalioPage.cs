@@ -123,7 +123,7 @@ namespace Kyalio.Pages
 
             try
             {
-                var fresh = await WatchHistoryLoader.FetchAsync().AttachExternalCancellation(ct);
+                var fresh = await MyKyalioLoader.FetchWatchHistoryAsync().AttachExternalCancellation(ct);
                 if (ct.IsCancellationRequested) return;
 
                 if (!SameHistory(cached, fresh))

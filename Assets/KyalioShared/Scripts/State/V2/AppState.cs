@@ -18,9 +18,12 @@ namespace Kyalio.State.V2
 
         /// <summary>
         /// Most recent Recently Watched list (mode = project), or null before the first
-        /// fetch. Filled by <see cref="Kyalio.Core.WatchHistoryLoader"/>.
+        /// fetch. Filled by <see cref="Kyalio.Core.MyKyalioLoader"/>.
         /// </summary>
         public List<WatchHistoryItem> WatchHistory { get; private set; }
+
+        /// <summary>Most recent Favorites list, or null before the first fetch. Filled by MyKyalioLoader.</summary>
+        public List<FavoriteItem> Favorites { get; private set; }
 
         /// <summary>Cancelled on <see cref="Reset"/>: background work for this session stops at logout.</summary>
         public CancellationToken SessionToken => _sessionCts.Token;
@@ -32,6 +35,12 @@ namespace Kyalio.State.V2
         {
             WatchHistory = items;
             WatchHistoryDirty = false;
+        }
+
+        public void SetFavorites(List<FavoriteItem> items)
+        {
+            Favorites = items;
+            FavoritesDirty = false;
         }
 
         public void SetHome(HomeResponse home)
@@ -47,7 +56,6 @@ namespace Kyalio.State.V2
 
         public void MarkWatchHistoryDirty()   => WatchHistoryDirty = true;
         public void MarkFavoritesDirty()      => FavoritesDirty    = true;
-        public void ClearFavoritesDirty()     => FavoritesDirty    = false;
 
         public static void Reset()
         {
