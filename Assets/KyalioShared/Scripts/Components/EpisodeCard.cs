@@ -35,6 +35,7 @@ namespace Kyalio.Components
 
             if (progressBar != null)
                 progressBar.interactable = false;
+            SliderFillClip.Install(progressBar);
         }
 
         public void Bind(string projectId, PlaylistItem item, int progressMs)

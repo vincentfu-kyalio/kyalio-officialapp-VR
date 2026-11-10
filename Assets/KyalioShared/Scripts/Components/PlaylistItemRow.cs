@@ -58,6 +58,7 @@ namespace Kyalio.Components
         private void Awake()
         {
             ThumbnailLoader.Track(thumbnail);
+            SliderFillClip.Install(watchProgressSlider);
             playButton.onClick.AddListener(() => OnClicked?.Invoke(_item));
 
             if (downloadButton != null)

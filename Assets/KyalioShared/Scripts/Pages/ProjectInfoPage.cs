@@ -88,6 +88,7 @@ namespace Kyalio.Pages
         private void Awake()
         {
             ThumbnailLoader.Track(thumbnailImage);
+            SliderFillClip.Install(overallProgressSlider);
             backButton.onClick.AddListener(() => UIManager.Instance.GoBack());
             favoriteButton.onClick.AddListener(OnFavoriteToggled);
 

@@ -34,6 +34,7 @@ namespace Kyalio.Components
         private void Awake()
         {
             ThumbnailLoader.Track(thumbnail, programLogo);
+            SliderFillClip.Install(progressBar);
             button.onClick.AddListener(() => OnClicked?.Invoke(_projectId, _videoId));
         }
 
