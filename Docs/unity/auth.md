@@ -576,6 +576,43 @@ Notes:
 
 ---
 
+## Current Account
+
+### `GET /api/me`
+
+Returns the signed-in member's email and name, so the app can show which account is signed in. Works with mobile and Quest tokens, whichever way the session started (mobile login, Quest password login, or pairing). Call it after signing in and on launch with a stored token; login and pairing responses do not include the account.
+
+Headers:
+
+```http
+Authorization: Bearer <access-token>
+X-App-Version: 2.0.0
+```
+
+Response:
+
+```json
+{
+  "email": "user@example.com",
+  "name": "Chris Tan"
+}
+```
+
+Rules:
+
+- Both fields are read from the member record on each request, not from the token, so a name or email changed by an admin shows on the next call.
+- `name` is the member's display name. It is `null` when none is set; show the email instead.
+
+Common errors:
+
+| Status | Code                  | Meaning                                         |
+| ------ | --------------------- | ----------------------------------------------- |
+| `401`  | `AUTH_MISSING_TOKEN`  | No Bearer token                                 |
+| `401`  | `AUTH_INVALID_TOKEN`  | Token is invalid or expired, or its device binding or Quest session was revoked |
+| `404`  | `NOT_FOUND`           | The member no longer exists                     |
+
+---
+
 ## Forgot Password
 
 ### `POST /api/auth/forgot-password`

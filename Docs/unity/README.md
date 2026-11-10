@@ -6,7 +6,7 @@ The Unity integration contract for the Member Media API, split by topic.
 
 - **[overview.md](overview.md)** — Base URL, authentication overview, error envelope, basic flows (Mobile / Quest), app version check, and the full endpoint inventory by auth class.
 - **[schemas.md](schemas.md)** — Core shared DTO schemas: `Credential`, `ProgramSummary`, `EpisodeRef`, `PlaylistItem`, `Project`, `ProgressItem`, `PagedResponse<T>`, thumbnail envelope, and the public ID format.
-- **[auth.md](auth.md)** — Auth endpoints: Quest pairing, Quest password login, mobile login, device replace / switch, token refresh, logout, forgot password.
+- **[auth.md](auth.md)** — Auth endpoints: Quest pairing, Quest password login, mobile login, device replace / switch, token refresh, logout, current account (`GET /api/me`), forgot password.
 - **[content.md](content.md)** — Content endpoints: delta sync, progress sync, project batch fetch, home feed, project search, project detail.
 - **[media.md](media.md)** — Video stream URL and the R2 download lifecycle (request URL → complete / cancel / delete).
 - **[engagement.md](engagement.md)** — Favorites, watch history, analytics reporting.
