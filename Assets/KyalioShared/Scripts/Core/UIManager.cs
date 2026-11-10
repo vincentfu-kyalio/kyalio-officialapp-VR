@@ -31,6 +31,12 @@ namespace Kyalio.Core
                  "(e.g. the video's first frame) before fading in anyway.")]
         [SerializeField, Min(0f)] private float maxRevealWait = 3f;
 
+        [Tooltip("Fade-in time of a page entered without the black SceneFader fade. 0 turns it off.")]
+        [SerializeField, Min(0f)] private float pageFadeInDuration = 0.15f;
+
+        private readonly Dictionary<PageType, Coroutine> _pageFades = new();
+        private readonly Dictionary<PageType, CanvasGroup> _fadeGroups = new();
+
         [System.Serializable]
         private class PageEntry
         {
@@ -119,12 +125,69 @@ namespace Kyalio.Core
             if (fade && SceneFader.Instance != null)
             {
                 SceneFader.Instance.FadeOutThenIn(
-                    () => GoToImmediate(pageType, param),
+                    () => BehindFade(() => GoToImmediate(pageType, param)),
                     holdWhile: () => !IsReadyToReveal(pageType),
                     maxHold: maxRevealWait);
                 return;
             }
             GoToImmediate(pageType, param);
+        }
+
+        // ── Page fade-in ──────────────────────────────────────────────
+
+        // A page switch hidden behind the black SceneFader fade is already covered;
+        // fading the page in as well would only delay it.
+        private bool _enteringBehindFade;
+
+        private void BehindFade(System.Action enter)
+        {
+            _enteringBehindFade = true;
+            try     { enter(); }
+            finally { _enteringBehindFade = false; }
+        }
+
+        // Fades the entered page from transparent, so content bound in OnEnter (and
+        // layout settling in its first frames) appears as one smooth reveal.
+        private void FadeInPage(PageType pageType, GameObject page)
+        {
+            StopPageFade(pageType);
+
+            // A page that brings its own CanvasGroup (e.g. the video controls' show/hide)
+            // drives that alpha itself; only groups added here are ours to animate.
+            if (!_fadeGroups.TryGetValue(pageType, out var group))
+            {
+                if (page.TryGetComponent<CanvasGroup>(out _)) return;
+                group = page.AddComponent<CanvasGroup>();
+                _fadeGroups[pageType] = group;
+            }
+
+            if (_enteringBehindFade || pageFadeInDuration <= 0f)
+            {
+                group.alpha = 1f;
+                return;
+            }
+            group.alpha = 0f;
+            _pageFades[pageType] = StartCoroutine(FadeInRoutine(pageType, group));
+        }
+
+        private void StopPageFade(PageType pageType)
+        {
+            if (!_pageFades.TryGetValue(pageType, out var running)) return;
+            if (running != null) StopCoroutine(running);
+            _pageFades.Remove(pageType);
+        }
+
+        private System.Collections.IEnumerator FadeInRoutine(PageType pageType, CanvasGroup group)
+        {
+            float elapsed = 0f;
+            while (elapsed < pageFadeInDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                group.alpha = Mathf.Clamp01(elapsed / pageFadeInDuration);
+                yield return null;
+            }
+            group.alpha = 1f;
+            _pageFades.Remove(pageType);
         }
 
         // Pages without a gate are ready as soon as they are entered.
@@ -162,7 +225,7 @@ namespace Kyalio.Core
 
             if (fade && SceneFader.Instance != null)
             {
-                SceneFader.Instance.FadeOutThenIn(GoBackImmediate);
+                SceneFader.Instance.FadeOutThenIn(() => BehindFade(GoBackImmediate));
                 return;
             }
             GoBackImmediate();
@@ -187,16 +250,21 @@ namespace Kyalio.Core
                 Debug.LogError($"[UIManager] No handler registered for {pageType}.");
                 return;
             }
+            var page = ((MonoBehaviour)handler).gameObject;
             if (_canvasPages.TryGetValue(pageType, out var toggle))
                 SetCanvasVisible(toggle, true);
             else
-                ((MonoBehaviour)handler).gameObject.SetActive(true);
+                page.SetActive(true);
             handler.OnEnter(param);
+
+            // After OnEnter: the page is filled while still fully transparent.
+            FadeInPage(pageType, page);
         }
 
         private void ExitPage(PageType pageType)
         {
             if (!_pageMap.TryGetValue(pageType, out var handler)) return;
+            StopPageFade(pageType);
             handler.OnExit();
             if (_canvasPages.TryGetValue(pageType, out var toggle))
                 SetCanvasVisible(toggle, false);
