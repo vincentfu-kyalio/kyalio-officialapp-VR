@@ -94,14 +94,16 @@ namespace Kyalio.Components
 
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnail);
             if (!string.IsNullOrEmpty(thumbnailUrl))
-                LoadImageAsync(thumbnailUrl, thumbnail, _cts.Token).Forget();
+                LoadImageAsync(thumbnailUrl, thumbnail, _cts.Token, asThumbnail: true).Forget();
 
             if (programPicImage != null)
             {
                 programPicImage.gameObject.SetActive(!string.IsNullOrEmpty(programPicUrl));
+                ImageReveal.HideUntilLoaded(programPicImage);
                 if (!string.IsNullOrEmpty(programPicUrl))
-                    LoadImageAsync(programPicUrl, programPicImage, _cts.Token).Forget();
+                    LoadImageAsync(programPicUrl, programPicImage, _cts.Token, asThumbnail: false).Forget();
             }
         }
 
@@ -126,14 +128,16 @@ namespace Kyalio.Components
         public bool IsSelected => toggle.isOn;
         public string ProjectId => _projectId;
 
-        private async UniTaskVoid LoadImageAsync(string url, Image target, CancellationToken ct)
+        // asThumbnail: brighten from the dark placeholder; otherwise (program logo) fade in.
+        private async UniTaskVoid LoadImageAsync(string url, Image target, CancellationToken ct,
+            bool asThumbnail)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(ThumbnailLoader.Resolve(url), ct);
-            if (sprite != null && !ct.IsCancellationRequested)
-            {
-                target.sprite = sprite;
-                target.color  = Color.white;
-            }
+            if (sprite == null || ct.IsCancellationRequested) return;
+
+            if (asThumbnail) ImageReveal.ShowThumbnail(target, sprite, startFrame);
+            else             ImageReveal.ShowFadeIn(target, sprite, startFrame);
         }
 
         /// <summary>Cancels in-flight image loads; call before returning the item to a pool.</summary>

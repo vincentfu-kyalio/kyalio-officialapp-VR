@@ -116,6 +116,7 @@ namespace Kyalio.Components
             _cts = new CancellationTokenSource();
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnail);
             if (!string.IsNullOrEmpty(item.ThumbnailUrl))
                 LoadThumbnailAsync(ThumbnailLoader.Resolve(item.ThumbnailUrl), _cts.Token).Forget();
 
@@ -356,12 +357,10 @@ namespace Kyalio.Components
 
         private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-            {
-                thumbnail.sprite = sprite;
-                thumbnail.color  = Color.white;
-            }
+                ImageReveal.ShowThumbnail(thumbnail, sprite, startFrame);
         }
     }
 }

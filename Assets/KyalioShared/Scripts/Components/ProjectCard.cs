@@ -80,6 +80,7 @@ namespace Kyalio.Components
             // Thumbnail
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnail);
             bool hasThumbnail = !string.IsNullOrEmpty(project.ThumbnailUrl);
             thumbnail.gameObject.SetActive(hasThumbnail);
             if (hasThumbnail)
@@ -90,6 +91,7 @@ namespace Kyalio.Components
             {
                 var picUrl = repo.GetFirstProgram(project)?.PicUrl;
                 programLogo.gameObject.SetActive(!string.IsNullOrEmpty(picUrl));
+                ImageReveal.HideUntilLoaded(programLogo);   // no stale logo from the previous project
                 if (!string.IsNullOrEmpty(picUrl))
                     LoadProgramLogoAsync(ThumbnailLoader.Resolve(picUrl), _cts.Token).Forget();
             }
@@ -103,12 +105,10 @@ namespace Kyalio.Components
 
         private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-            {
-                thumbnail.sprite = sprite;
-                thumbnail.color  = Color.white;
-            }
+                ImageReveal.ShowThumbnail(thumbnail, sprite, startFrame);
         }
 
         private static string FormatDuration(int totalSeconds)
@@ -122,9 +122,10 @@ namespace Kyalio.Components
 
         private async UniTaskVoid LoadProgramLogoAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-                programLogo.sprite = sprite;
+                ImageReveal.ShowFadeIn(programLogo, sprite, startFrame);
         }
 
         /// <summary>

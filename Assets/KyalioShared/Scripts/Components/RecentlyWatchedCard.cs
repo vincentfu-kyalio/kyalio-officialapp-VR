@@ -74,6 +74,7 @@ namespace Kyalio.Components
 
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnail);
             var thumbUrl = ThumbnailUrlFor(item);
             if (!string.IsNullOrEmpty(thumbUrl))
                 LoadThumbnailAsync(thumbUrl, _cts.Token).Forget();
@@ -82,6 +83,7 @@ namespace Kyalio.Components
             {
                 var picUrl = ProgramLogoUrlFor(item);
                 programLogo.sprite = null;
+                ImageReveal.HideUntilLoaded(programLogo);
                 programLogo.gameObject.SetActive(!string.IsNullOrEmpty(picUrl));
                 if (!string.IsNullOrEmpty(picUrl))
                     LoadProgramLogoAsync(picUrl, _cts.Token).Forget();
@@ -116,19 +118,18 @@ namespace Kyalio.Components
 
         private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-            {
-                thumbnail.sprite = sprite;
-                thumbnail.color  = Color.white;
-            }
+                ImageReveal.ShowThumbnail(thumbnail, sprite, startFrame);
         }
 
         private async UniTaskVoid LoadProgramLogoAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-                programLogo.sprite = sprite;
+                ImageReveal.ShowFadeIn(programLogo, sprite, startFrame);
         }
 
         private void OnDestroy() => _cts?.Cancel();

@@ -233,15 +233,14 @@ namespace Kyalio.Pages
 
             thumbnailImage.sprite = null;
             thumbnailImage.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnailImage);
             if (string.IsNullOrEmpty(url)) return;
 
             // A cached sprite comes back synchronously, so the placeholder never shows.
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(ThumbnailLoader.Resolve(url), ct);
             if (sprite != null && !ct.IsCancellationRequested)
-            {
-                thumbnailImage.sprite = sprite;
-                thumbnailImage.color  = Color.white;
-            }
+                ImageReveal.ShowThumbnail(thumbnailImage, sprite, startFrame);
         }
 
         private static bool IsExpired(string isoTime)
@@ -278,6 +277,7 @@ namespace Kyalio.Pages
             {
                 thumbnailImage.sprite = null;
                 thumbnailImage.color  = new Color32(43, 43, 43, 255);
+                ImageReveal.Reset(thumbnailImage);
             }
         }
 
