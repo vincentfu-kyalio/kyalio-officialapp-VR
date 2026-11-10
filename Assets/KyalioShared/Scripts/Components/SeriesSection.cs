@@ -10,7 +10,10 @@ namespace Kyalio.Components
     /// Supports the two home-roles display modes:
     ///   - projects mode: Bind(projects)        — shows ProjectCards
     ///   - episodes mode: BindEpisodes(episodes) — shows EpisodeCards
-    /// Title and navigation are owned by SeriesPage; this component only manages card pooling.
+    /// Title and navigation are owned by SeriesPage; this component only manages the cards.
+    ///
+    /// Both modes are virtualised (see <see cref="VirtualGrid{T}"/>) and share seriesContent
+    /// and its GridLayoutGroup; only one has items at a time.
     /// Inspector: seriesContent, projectCardPrefab, episodeCardPrefab, scrollRect
     /// </summary>
     public class SeriesSection : MonoBehaviour
@@ -20,15 +23,32 @@ namespace Kyalio.Components
         [SerializeField] private EpisodeCard episodeCardPrefab;
         [SerializeField] private ScrollRect scrollRect;
 
-        private CardPool<ProjectCard> _projectPool;
-        private CardPool<EpisodeCard> _episodePool;
-        private CardPool<ProjectCard> ProjectPool => _projectPool ??= new(projectCardPrefab, seriesContent, c => c.CancelLoads());
-        private CardPool<EpisodeCard> EpisodePool => _episodePool ??= new(episodeCardPrefab, seriesContent, c => c.CancelLoads());
+        [Tooltip("Extra rows kept bound above and below the viewport.")]
+        [SerializeField, Min(0)] private int bufferRows = 1;
 
         public System.Action<Project> OnProjectClicked;
 
         /// <summary>(projectId, video) of the clicked episode.</summary>
         public System.Action<string, PlaylistItem> OnEpisodeClicked;
+
+        private readonly List<Project> _projects = new();
+        private readonly List<(string projectId, PlaylistItem item, int progressMs)> _episodes = new();
+
+        private VirtualGrid<ProjectCard> _projectGrid;
+        private VirtualGrid<EpisodeCard> _episodeGrid;
+
+        // Created lazily: the page may bind before this component's Awake has run.
+        private VirtualGrid<ProjectCard> ProjectGrid => _projectGrid ??= new VirtualGrid<ProjectCard>(
+            (RectTransform)seriesContent, projectCardPrefab, scrollRect, bufferRows,
+            onCreate: card => card.OnClicked = proj => OnProjectClicked?.Invoke(proj),
+            bind: (card, i) => card.Bind(_projects[i]),
+            onHide: card => card.CancelLoads());
+
+        private VirtualGrid<EpisodeCard> EpisodeGrid => _episodeGrid ??= new VirtualGrid<EpisodeCard>(
+            (RectTransform)seriesContent, episodeCardPrefab, scrollRect, bufferRows,
+            onCreate: card => card.OnClicked = (pid, item) => OnEpisodeClicked?.Invoke(pid, item),
+            bind: (card, i) => card.Bind(_episodes[i].projectId, _episodes[i].item, _episodes[i].progressMs),
+            onHide: card => card.CancelLoads());
 
         // ── Public API ────────────────────────────────────────────────
 
@@ -36,66 +56,44 @@ namespace Kyalio.Components
         /// Projects mode — shows a ProjectCard per project and scrolls to the top.
         /// Pass keepScroll when re-showing the same role (e.g. returning to the page):
         /// the content position is left untouched, so the user lands where they left.
-        /// Cards already showing are rebound in place (CardPool.GetOrReuse).
         /// </summary>
         public void Bind(IReadOnlyList<Project> projects, bool keepScroll = false)
         {
-            EpisodePool.ReturnAll();
+            // Empty the other mode first: both grids size the same container.
+            _episodes.Clear();
+            if (_episodeGrid != null && _episodeGrid.Count > 0) _episodeGrid.SetCount(0, keepScroll: true);
 
-            int count = projects?.Count ?? 0;
-            for (int i = 0; i < count; i++)
-            {
-                var card = ProjectPool.GetOrReuse(i);
-                card.OnClicked = proj => OnProjectClicked?.Invoke(proj);
-                card.Bind(projects[i]);
-            }
-            ProjectPool.TrimTo(count);
-
-            RefreshLayout(keepScroll);
+            _projects.Clear();
+            if (projects != null) _projects.AddRange(projects);
+            ProjectGrid.SetCount(_projects.Count, keepScroll);
         }
 
         /// <summary>Episodes mode — shows an EpisodeCard per (project, video, progress). keepScroll as in Bind.</summary>
         public void BindEpisodes(IReadOnlyList<(string projectId, PlaylistItem item, int progressMs)> episodes,
             bool keepScroll = false)
         {
-            ProjectPool.ReturnAll();
+            _projects.Clear();
+            if (_projectGrid != null && _projectGrid.Count > 0) _projectGrid.SetCount(0, keepScroll: true);
 
-            int count = 0;
+            _episodes.Clear();
             if (episodes != null)
-            {
                 foreach (var ep in episodes)
-                {
-                    if (ep.item == null) continue;
-                    var card = EpisodePool.GetOrReuse(count++);
-                    card.OnClicked = (pid, item) => OnEpisodeClicked?.Invoke(pid, item);
-                    card.Bind(ep.projectId, ep.item, ep.progressMs);
-                }
-            }
-            EpisodePool.TrimTo(count);
-
-            RefreshLayout(keepScroll);
+                    if (ep.item != null) _episodes.Add(ep);
+            EpisodeGrid.SetCount(_episodes.Count, keepScroll);
         }
 
         public void Clear()
         {
-            ProjectPool.ReturnAll();
-            EpisodePool.ReturnAll();
+            _projects.Clear();
+            _episodes.Clear();
+            if (_projectGrid != null) _projectGrid.SetCount(0, keepScroll: true);
+            if (_episodeGrid != null) _episodeGrid.SetCount(0, keepScroll: true);
         }
 
-        /// <summary>
-        /// Forces the ScrollRect content to rebuild after its cards change and,
-        /// unless keepScroll, resets the scroll position to the top. seriesContent is nested inside
-        /// the ScrollRect content, so rebuilding the outer content is what
-        /// propagates the new size up to the ScrollRect — rebuilding only the
-        /// inner container leaves the scroll view blank or clipped.
-        /// </summary>
-        private void RefreshLayout(bool keepScroll)
+        private void OnDestroy()
         {
-            if (scrollRect == null) return;
-            if (scrollRect.content != null)
-                LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
-            if (!keepScroll)
-                scrollRect.verticalNormalizedPosition = 1f;
+            _projectGrid?.Dispose();
+            _episodeGrid?.Dispose();
         }
     }
 }
