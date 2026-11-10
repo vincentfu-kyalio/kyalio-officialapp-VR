@@ -18,6 +18,7 @@ namespace Kyalio.Components
     ///   [categoryText]     — category name
     ///   [drNameText]       — "By Dr. {name}"
     ///   [videoCountText]   — number of videos (e.g. "3")
+    ///   [sizeText]         — formatted size (project total / downloaded bytes)
     ///   [isListSign]       — playlist icon; shown when videoCount > 1
     ///   [button]           — full-row tap to navigate (active in both modes)
     ///
@@ -32,6 +33,7 @@ namespace Kyalio.Components
         [SerializeField] private TextMeshProUGUI categoryText;  // nullable
         [SerializeField] private TextMeshProUGUI drNameText;    // nullable, shown as "By Dr. …"
         [SerializeField] private TextMeshProUGUI videoCountText;// nullable
+        [SerializeField] private TextMeshProUGUI sizeText;      // nullable; hidden when no size
         [SerializeField] private GameObject isListSign;         // nullable; visible when videoCount > 1
         [SerializeField] private GameObject toggleContainer;    // parent of toggle; hidden in normal mode
         [SerializeField] private Toggle toggle;
@@ -57,7 +59,7 @@ namespace Kyalio.Components
         /// Binds all display data to this item.
         /// </summary>
         public void Bind(string projectId, string title, string category, string drName,
-            string thumbnailUrl, string programPicUrl, int videoCount,
+            string thumbnailUrl, string programPicUrl, int videoCount, string sizeLabel,
             bool prefixWithDr = true, bool isSelected = false)
         {
             _projectId = projectId;
@@ -78,6 +80,12 @@ namespace Kyalio.Components
 
             if (isListSign != null)
                 isListSign.SetActive(videoCount > 1);
+
+            if (sizeText != null)
+            {
+                sizeText.gameObject.SetActive(!string.IsNullOrEmpty(sizeLabel));
+                sizeText.text = sizeLabel ?? string.Empty;
+            }
 
             toggle.SetIsOnWithoutNotify(isSelected);
 

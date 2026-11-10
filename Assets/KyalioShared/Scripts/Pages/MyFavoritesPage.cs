@@ -164,7 +164,7 @@ namespace Kyalio.Pages
                     p?.ThumbnailUrl,
                     repo.GetFirstProgram(p)?.PicUrl,
                     p?.PlaylistCount ?? 0,
-                    true);
+                    ProjectSizeBytes(p) is var size && size > 0 ? FormatBytes(size) : null);
                 count++;
             }
             EndList();
@@ -207,8 +207,8 @@ namespace Kyalio.Pages
                     .Sum(r => r.SizeBytes);
 
                 SpawnItem(p.ProjectId, p.ProjectName, repo.GetSpecialtyName(p.SpecialtyId),
-                    FormatBytes(projectBytes), p.ThumbnailUrl, repo.GetFirstProgram(p)?.PicUrl,
-                    p.PlaylistCount, false);
+                    p.SurgeonsText, p.ThumbnailUrl, repo.GetFirstProgram(p)?.PicUrl,
+                    p.PlaylistCount, FormatBytes(projectBytes));
             }
             EndList();
         }
@@ -223,16 +223,25 @@ namespace Kyalio.Pages
 
         private void EndList() => ItemPool.TrimTo(_items.Count);
 
+        // sizeLabel: project total in Favorites, bytes actually downloaded in Downloads.
         private void SpawnItem(string projectId, string title, string category,
-            string drName, string thumbnailUrl, string programPicUrl, int videoCount, bool prefixWithDr)
+            string drName, string thumbnailUrl, string programPicUrl, int videoCount, string sizeLabel)
         {
             var item = ItemPool.GetOrReuse(_items.Count);
             item.OnSelectionChanged = OnItemSelectionChanged;
             item.OnItemClicked = pid => UIManager.Instance.GoTo(PageType.ProjectInfo,
                 new Kyalio.Models.ProjectNavParam { ProjectId = pid, Source = ProjectPageSource.Favorites });
-            item.Bind(projectId, title, category, drName, thumbnailUrl, programPicUrl, videoCount, prefixWithDr);
+            item.Bind(projectId, title, category, drName, thumbnailUrl, programPicUrl, videoCount, sizeLabel);
             item.SetEditMode(_isEditMode);
             _items.Add(item);
+        }
+
+        // Server total, falling back to the playlist sum (same as ProjectInfoPage).
+        private static long ProjectSizeBytes(Project p)
+        {
+            if (p == null) return 0;
+            if (p.TotalSizeBytes > 0 || p.Playlist == null) return p.TotalSizeBytes;
+            return p.Playlist.Sum(v => v.SizeBytes);
         }
 
         private static string FormatBytes(long bytes)
