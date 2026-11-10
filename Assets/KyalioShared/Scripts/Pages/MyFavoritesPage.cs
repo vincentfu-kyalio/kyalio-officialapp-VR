@@ -57,15 +57,48 @@ namespace Kyalio.Pages
 
         // ── Runtime state ─────────────────────────────────────────────
 
-        private bool _isEditMode;
-        private readonly List<string> _selectedIds = new();
-        private readonly List<SelectableListItem> _items = new();
+        private struct Row
+        {
+            public string ProjectId, Title, Category, DrName, ThumbnailUrl, ProgramPicUrl, SizeLabel;
+            public int VideoCount;
+        }
 
-        // Items are reused across reloads instead of Instantiate / Destroy each time.
-        private CardPool<SelectableListItem> _itemPool;
-        private CardPool<SelectableListItem> ItemPool =>
-            _itemPool ??= new(itemPrefab, listContainer, i => i.CancelLoads(), destroyExisting: true);
+        private bool _isEditMode;
+        // Selection lives on the data, not the items: the list is virtualised, so an item
+        // object shows different rows as the list scrolls.
+        private readonly List<string> _selectedIds = new();
+        private readonly List<Row> _rows = new();
+
+        private VirtualGrid<SelectableListItem> _grid;
         private CancellationTokenSource _cts;
+
+        // Created lazily: the panel may be bound before its Awake has run.
+        private VirtualGrid<SelectableListItem> Grid
+        {
+            get
+            {
+                if (_grid != null) return _grid;
+
+                // Placeholder items left in the scene would otherwise stay in the container.
+                foreach (Transform child in listContainer)
+                    if (child.TryGetComponent<SelectableListItem>(out _))
+                        Destroy(child.gameObject);
+
+                _grid = new VirtualGrid<SelectableListItem>(
+                    (RectTransform)listContainer, itemPrefab, null, bufferRows: 1,
+                    onCreate: item =>
+                    {
+                        item.OnSelectionChanged = OnItemSelectionChanged;
+                        item.OnItemClicked = pid => UIManager.Instance.GoTo(PageType.ProjectInfo,
+                            new Kyalio.Models.ProjectNavParam { ProjectId = pid, Source = ProjectPageSource.Favorites });
+                    },
+                    bind: BindRow,
+                    onHide: item => item.CancelLoads());
+                return _grid;
+            }
+        }
+
+        private void OnDestroy() => _grid?.Dispose();
 
         // ── Unity lifecycle ───────────────────────────────────────────
 
@@ -105,7 +138,7 @@ namespace Kyalio.Pages
             // Favorites: skip reload when cache is fresh
             if (_mode == ListMode.Favorites &&
                 !AppState.Instance.FavoritesDirty &&
-                _items.Count > 0)
+                _rows.Count > 0)
                 return;
 
             _cts?.Cancel();
@@ -213,27 +246,35 @@ namespace Kyalio.Pages
             EndList();
         }
 
-        // A list rebuild is BeginList → SpawnItem × n → EndList. Items already showing are
-        // rebound in place (CardPool.GetOrReuse); EndList returns the leftovers.
+        // A list rebuild is BeginList → SpawnItem × n → EndList; the grid then binds only the
+        // rows in view.
         private void BeginList()
         {
-            _items.Clear();
+            _rows.Clear();
             _selectedIds.Clear();
         }
 
-        private void EndList() => ItemPool.TrimTo(_items.Count);
+        private void EndList() => Grid.SetCount(_rows.Count, keepScroll: true);
 
         // sizeLabel: project total in Favorites, bytes actually downloaded in Downloads.
         private void SpawnItem(string projectId, string title, string category,
             string drName, string thumbnailUrl, string programPicUrl, int videoCount, string sizeLabel)
         {
-            var item = ItemPool.GetOrReuse(_items.Count);
-            item.OnSelectionChanged = OnItemSelectionChanged;
-            item.OnItemClicked = pid => UIManager.Instance.GoTo(PageType.ProjectInfo,
-                new Kyalio.Models.ProjectNavParam { ProjectId = pid, Source = ProjectPageSource.Favorites });
-            item.Bind(projectId, title, category, drName, thumbnailUrl, programPicUrl, videoCount, sizeLabel);
-            item.SetEditMode(_isEditMode);
-            _items.Add(item);
+            _rows.Add(new Row
+            {
+                ProjectId = projectId, Title = title, Category = category, DrName = drName,
+                ThumbnailUrl = thumbnailUrl, ProgramPicUrl = programPicUrl,
+                VideoCount = videoCount, SizeLabel = sizeLabel,
+            });
+        }
+
+        private void BindRow(SelectableListItem item, int index)
+        {
+            var r = _rows[index];
+            item.Bind(r.ProjectId, r.Title, r.Category, r.DrName, r.ThumbnailUrl, r.ProgramPicUrl,
+                r.VideoCount, r.SizeLabel);
+            item.SetEditMode(_isEditMode);   // leaving edit mode also clears the toggle
+            if (_isEditMode) item.SetSelected(_selectedIds.Contains(r.ProjectId));
         }
 
         // Server total, falling back to the playlist sum (same as ProjectInfoPage).
@@ -264,9 +305,7 @@ namespace Kyalio.Pages
             selectAllToggle.gameObject.SetActive(true);
             selectAllToggle.SetIsOnWithoutNotify(false);
 
-            foreach (var item in _items)
-                item.SetEditMode(true);
-
+            _grid?.RebindShown();
             RefreshDeleteButton();
         }
 
@@ -280,9 +319,7 @@ namespace Kyalio.Pages
             cancelButton.gameObject.SetActive(false);
             selectAllToggle.gameObject.SetActive(false);
 
-            foreach (var item in _items)
-                item.SetEditMode(false);
-
+            _grid?.RebindShown();
             RefreshDeleteButton();
         }
 
@@ -291,7 +328,7 @@ namespace Kyalio.Pages
             if (selected) { if (!_selectedIds.Contains(projectId)) _selectedIds.Add(projectId); }
             else _selectedIds.Remove(projectId);
 
-            bool allSelected = _items.Count > 0 && _selectedIds.Count == _items.Count;
+            bool allSelected = _rows.Count > 0 && _selectedIds.Count == _rows.Count;
             selectAllToggle.SetIsOnWithoutNotify(allSelected);
 
             RefreshDeleteButton();
@@ -300,13 +337,11 @@ namespace Kyalio.Pages
         private void OnSelectAllChanged(bool isOn)
         {
             _selectedIds.Clear();
+            if (isOn)
+                foreach (var r in _rows)
+                    _selectedIds.Add(r.ProjectId);
 
-            foreach (var item in _items)
-            {
-                item.SetSelected(isOn);
-                if (isOn) _selectedIds.Add(item.ProjectId);
-            }
-
+            _grid?.RebindShown();
             RefreshDeleteButton();
         }
 

@@ -7,8 +7,8 @@ using UnityEngine.UI;
 namespace Kyalio.Components
 {
     /// <summary>
-    /// Recently Watched horizontal scrolling section.
-    /// Inspector: titleText, seeAllButton (optional), slideContent, cardPrefab
+    /// Recently Watched card grid, virtualised (see <see cref="VirtualGrid{T}"/>).
+    /// Inspector: titleText, seeAllButton (optional), slideContent (the GridLayoutGroup), cardPrefab
     /// </summary>
     public class RecentlyWatchedSection : MonoBehaviour
     {
@@ -17,12 +17,23 @@ namespace Kyalio.Components
         [SerializeField] private Transform slideContent;
         [SerializeField] private RecentlyWatchedCard cardPrefab;
 
-        private ScrollRect _scrollRect;
-        private CardPool<RecentlyWatchedCard> _pool;
-        private CardPool<RecentlyWatchedCard> Pool => _pool ??= new(cardPrefab, slideContent, c => c.CancelLoads());
+        [Tooltip("Extra rows kept bound above and below the viewport.")]
+        [SerializeField, Min(0)] private int bufferRows = 1;
 
         public System.Action<string> OnProjectClicked; // projectId
         public System.Action OnSeeAllClicked;
+
+        private readonly List<WatchHistoryItem> _items = new();
+        private VirtualGrid<RecentlyWatchedCard> _grid;
+
+        // Created lazily: the page may bind before this component's Awake has run.
+        // SetCount also rebuilds the scroll content, which settles the grid's
+        // ContentSizeFitter nested inside the content's own fitter.
+        private VirtualGrid<RecentlyWatchedCard> Grid => _grid ??= new VirtualGrid<RecentlyWatchedCard>(
+            (RectTransform)slideContent, cardPrefab, null, bufferRows,
+            onCreate: card => card.OnClicked = (projectId, _) => OnProjectClicked?.Invoke(projectId),
+            bind: (card, i) => card.Bind(_items[i]),
+            onHide: card => card.CancelLoads());
 
         private void Awake()
         {
@@ -34,34 +45,20 @@ namespace Kyalio.Components
         {
             titleText.text = title;
 
-            // Rebind the cards already showing in place (CardPool.GetOrReuse).
-            for (int i = 0; i < items.Count; i++)
-            {
-                var card = Pool.GetOrReuse(i);
-                card.OnClicked = (projectId, _) => OnProjectClicked?.Invoke(projectId);
-                card.Bind(items[i]);
-            }
-            Pool.TrimTo(items.Count);
-
-            RefreshLayout();
+            _items.Clear();
+            if (items != null) _items.AddRange(items);
+            Grid.SetCount(_items.Count, keepScroll: true);   // panels keep their scroll
 
             if (seeAllButton != null)
-                seeAllButton.gameObject.SetActive(items.Count > 0);
+                seeAllButton.gameObject.SetActive(_items.Count > 0);
         }
 
-        public void Clear() => Pool.ReturnAll();
-
-        /// <summary>
-        /// The card grid's ContentSizeFitter sits inside the ScrollRect content's own fitter,
-        /// and a single layout pass can size the outer one before the inner one — the
-        /// ScrollRect then thinks nothing overflows (no scrollbar, stuck scroll). Rebuilding
-        /// the whole content after binding settles both, as ProjectCardList does.
-        /// </summary>
-        private void RefreshLayout()
+        public void Clear()
         {
-            if (_scrollRect == null) _scrollRect = GetComponentInChildren<ScrollRect>(includeInactive: true);
-            if (_scrollRect != null && _scrollRect.content != null)
-                LayoutRebuilder.ForceRebuildLayoutImmediate(_scrollRect.content);
+            _items.Clear();
+            _grid?.SetCount(0, keepScroll: true);
         }
+
+        private void OnDestroy() => _grid?.Dispose();
     }
 }

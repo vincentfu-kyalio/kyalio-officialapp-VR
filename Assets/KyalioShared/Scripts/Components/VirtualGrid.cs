@@ -25,6 +25,7 @@ namespace Kyalio.Components
         private readonly T _prefab;
         private readonly GridLayoutGroup _grid;
         private readonly LayoutElement _heightElement;
+        private readonly bool _sizeSelf;            // no ContentSizeFitter: set the rect height ourselves
         private readonly ScrollRect _scroller;      // nearest ScrollRect above the grid
         private readonly ScrollRect _outer;         // optional extra (serialized) ScrollRect
         private readonly int _bufferRows;
@@ -62,6 +63,7 @@ namespace Kyalio.Components
 
             if (!container.TryGetComponent(out _heightElement))
                 _heightElement = container.gameObject.AddComponent<LayoutElement>();
+            _sizeSelf = !container.TryGetComponent<ContentSizeFitter>(out _);
 
             _scroller = container.GetComponentInParent<ScrollRect>(includeInactive: true);
             _outer = outerScroll != _scroller ? outerScroll : null;
@@ -83,6 +85,9 @@ namespace Kyalio.Components
             RebuildScroll(_outer, keepScroll);
             Refresh(force: true);
         }
+
+        /// <summary>Rebinds the cards in view without changing the count or the layout (e.g. after a selection change).</summary>
+        public void RebindShown() => Refresh(force: true);
 
         public void Dispose()
         {
@@ -119,6 +124,11 @@ namespace Kyalio.Components
                 : Pad.vertical + rows * Cell.y + (rows - 1) * Spacing.y;
             _heightElement.preferredHeight = height;
             _heightElement.minHeight = height;
+            // Read by a parent layout that controls child height, or by the container's own
+            // ContentSizeFitter. Without either (a fixed-height grid) set the height directly,
+            // otherwise items past the fixed height could never be scrolled to.
+            if (_sizeSelf)
+                _rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
         }
 
         private Vector2 CellTopLeft(int index)
