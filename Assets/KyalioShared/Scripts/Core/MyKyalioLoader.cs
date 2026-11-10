@@ -53,6 +53,30 @@ namespace Kyalio.Core
         /// <summary>Fire and forget: fetches both lists, then warms the cache with their first images.</summary>
         public static void Prefetch() => PrefetchAsync().Forget();
 
+        private static readonly SharedFetch<MeResponse> s_account = new();
+
+        /// <summary>
+        /// Fetches the signed-in account (GET /api/me) into AppState.Account, shown in the
+        /// Account menu. Joins a fetch already running for this session.
+        /// </summary>
+        public static UniTask<MeResponse> FetchAccountAsync() =>
+            s_account.Run(async state =>
+            {
+                var me = await ServiceLocator.Instance.V2.Auth.GetMeAsync(state.SessionToken);
+                if (state == AppState.Instance) state.SetAccount(me);
+                return me;
+            });
+
+        /// <summary>Fire and forget <see cref="FetchAccountAsync"/>; a failure only leaves the account unshown.</summary>
+        public static void PrefetchAccount() => PrefetchAccountAsync().Forget();
+
+        private static async UniTaskVoid PrefetchAccountAsync()
+        {
+            try { await FetchAccountAsync(); }
+            catch (OperationCanceledException) { }
+            catch (Exception e) { Debug.LogWarning($"[MyKyalioLoader] Account fetch failed: {e.Message}"); }
+        }
+
         private static async UniTaskVoid PrefetchAsync()
         {
             var ct = AppState.Instance.SessionToken;

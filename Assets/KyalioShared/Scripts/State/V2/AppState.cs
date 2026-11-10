@@ -29,6 +29,11 @@ namespace Kyalio.State.V2
         public CancellationToken SessionToken => _sessionCts.Token;
         private readonly CancellationTokenSource _sessionCts = new();
 
+        /// <summary>The signed-in member (GET /api/me), or null until fetched.</summary>
+        public MeResponse Account { get; private set; }
+
+        public void SetAccount(MeResponse account) => Account = account;
+
         public void SetLoggedIn() => IsLoggedIn = true;
 
         public void SetWatchHistory(List<WatchHistoryItem> items)

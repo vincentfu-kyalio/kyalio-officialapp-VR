@@ -37,6 +37,13 @@ namespace Kyalio.Components
         public void ShowDone(string message, Action onDone = null)
             => popupPanel.ShowDone(message, onDone);
 
+        /// <summary>Account menu: Log out / Exit / Cancel. Cancel (or dismissing) runs onCancel.</summary>
+        public void ShowAccount(string message, Action onLogout, Action onExit, Action onCancel = null)
+            => popupPanel.ShowAccount(message, onLogout, onExit, onCancel);
+
+        /// <summary>Updates the open Account menu's message; ignored when it is not showing.</summary>
+        public void UpdateAccountMessage(string message) => popupPanel.UpdateAccountMessage(message);
+
         public void Hide() => popupPanel.Hide();
     }
 }

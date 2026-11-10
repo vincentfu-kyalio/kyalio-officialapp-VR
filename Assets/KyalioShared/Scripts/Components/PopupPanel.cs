@@ -10,7 +10,8 @@ namespace Kyalio.Components
     /// Controlled by PopupManager — do not call Show/Hide directly from pages.
     ///
     /// Inspector: assign messageText, then each button group with its buttons.
-    /// All three groups (yesNoGroup, deleteCancelGroup, doneGroup) must be assigned.
+    /// yesNoGroup, deleteCancelGroup and doneGroup must be assigned; accountGroup (Log out /
+    /// Exit / Cancel) is needed only for the Account menu.
     ///
     /// Works whether the GameObject starts active or inactive in the scene.
     /// Showing a popup while another is open dismisses the old one: its secondary
@@ -34,12 +35,20 @@ namespace Kyalio.Components
         [SerializeField] private GameObject doneGroup;
         [SerializeField] private Button doneButton;
 
+        [Header("Account (Log out / Exit / Cancel)")]
+        [SerializeField] private GameObject accountGroup;
+        [SerializeField] private Button logoutButton;
+        [SerializeField] private Button exitButton;
+        [SerializeField] private Button accountCancelButton;
+
         [Header("Transition")]
         [SerializeField, Min(0f)] private float fadeInDuration  = 0.15f;
         [SerializeField, Min(0f)] private float fadeOutDuration = 0.1f;
 
         private Action _primaryAction;
         private Action _secondaryAction;
+        private Action _tertiaryAction;   // third choice of a three-button group (Account: Exit)
+        private GameObject _activeGroup;
         private bool _visible;
 
         private CanvasGroup _group;
@@ -62,6 +71,9 @@ namespace Kyalio.Components
             deleteButton.onClick.AddListener(OnPrimary);
             cancelButton.onClick.AddListener(OnSecondary);
             doneButton.onClick.AddListener(OnPrimary);
+            if (logoutButton != null)        logoutButton.onClick.AddListener(OnPrimary);
+            if (accountCancelButton != null) accountCancelButton.onClick.AddListener(OnSecondary);
+            if (exitButton != null)          exitButton.onClick.AddListener(() => Close(_tertiaryAction));
 
             // Hide when left active in the scene. When the object starts inactive, Awake
             // first runs inside Show()'s SetActive(true) and must not hide it again.
@@ -78,6 +90,20 @@ namespace Kyalio.Components
         public void ShowDone(string message, Action onDone = null)
             => Show(message, doneGroup, onDone, null);
 
+        /// <summary>Account menu: Log out (primary), Exit (third), Cancel (secondary).</summary>
+        public void ShowAccount(string message, Action onLogout, Action onExit, Action onCancel = null)
+            => Show(message, accountGroup, onLogout, onCancel, onExit);
+
+        /// <summary>
+        /// Replaces the message of the open popup if it is showing the Account menu
+        /// (e.g. once the account has been fetched). Ignored otherwise.
+        /// </summary>
+        public void UpdateAccountMessage(string message)
+        {
+            if (_visible && _activeGroup == accountGroup && accountGroup != null)
+                messageText.text = message;
+        }
+
         /// <summary>Dismisses the popup as if No / Cancel was pressed.</summary>
         public void Hide() => Close(_secondaryAction);
 
@@ -92,6 +118,7 @@ namespace Kyalio.Components
             _visible = false;
             _primaryAction = null;
             _secondaryAction = null;
+            _tertiaryAction = null;
 
             // Stop taking clicks at once; the panel only stays up to fade out.
             Group.blocksRaycasts = false;
@@ -126,23 +153,28 @@ namespace Kyalio.Components
             if (deactivateAtEnd) gameObject.SetActive(false);
         }
 
-        private void Show(string message, GameObject activeGroup, Action primary, Action secondary)
+        private void Show(string message, GameObject activeGroup, Action primary, Action secondary,
+            Action tertiary = null)
         {
             if (_visible)
             {
                 var replaced = _secondaryAction;
                 _primaryAction = null;
                 _secondaryAction = null;
+                _tertiaryAction = null;
                 replaced?.Invoke();
             }
 
             messageText.text = message;
             _primaryAction = primary;
             _secondaryAction = secondary;
+            _tertiaryAction = tertiary;
+            _activeGroup = activeGroup;
 
             yesNoGroup.SetActive(yesNoGroup == activeGroup);
             deleteCancelGroup.SetActive(deleteCancelGroup == activeGroup);
             doneGroup.SetActive(doneGroup == activeGroup);
+            if (accountGroup != null) accountGroup.SetActive(accountGroup == activeGroup);
 
             bool wasHidden = !gameObject.activeSelf;
             _visible = true;

@@ -120,6 +120,19 @@ namespace Kyalio.Models.V2
         public string RefreshToken;
     }
 
+    // ── Current account ──────────────────────────────────────────────
+
+    /// <summary>GET /api/me — the signed-in member.</summary>
+    public class MeResponse
+    {
+        [JsonProperty("email")]
+        public string Email;
+
+        /// <summary>Display name, or null when none is set (show the email instead).</summary>
+        [JsonProperty("name")]
+        public string Name;
+    }
+
     // ── Forgot password ──────────────────────────────────────────────
 
     public class ForgotPasswordRequest

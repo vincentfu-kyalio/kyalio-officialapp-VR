@@ -445,6 +445,7 @@ namespace Kyalio.Pages
             // Background: My Kyalio's lists and first thumbnails are ready before it opens.
             // Its thumbnails wait for Home's, so Home is not slowed down.
             MyKyalioLoader.Prefetch();
+            MyKyalioLoader.PrefetchAccount();   // shown in the Account menu
 
             SetBusy(false);
 

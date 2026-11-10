@@ -146,5 +146,14 @@ namespace Kyalio.Services.V2
         public UniTask LogoutAsync(string refreshToken = null, CancellationToken ct = default)
             => _client.PostBodyAsync(
                 "/api/auth/logout", new LogoutRequest { RefreshToken = refreshToken }, ct);
+
+        // ── Current account ──────────────────────────────────────────
+
+        /// <summary>
+        /// GET /api/me — the signed-in member's email and display name. Login and pairing
+        /// responses do not include the account, so call this after signing in.
+        /// </summary>
+        public UniTask<MeResponse> GetMeAsync(CancellationToken ct = default)
+            => _client.GetAsync<MeResponse>("/api/me", ct);
     }
 }

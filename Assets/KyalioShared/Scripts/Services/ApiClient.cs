@@ -57,7 +57,16 @@ namespace Kyalio.Services
             _token = token;
             _unauthorizedFired = false;
         }
-        public void ClearToken() => _token = null;
+        /// <summary>
+        /// Drops the bearer (logout or expiry). A request still in flight with the old token
+        /// may come back 401 once the server has revoked it; that is expected now, so it must
+        /// not fire OnUnauthorized ("session expired") — SetToken re-arms it on the next login.
+        /// </summary>
+        public void ClearToken()
+        {
+            _token = null;
+            _unauthorizedFired = true;
+        }
         public string Token => _token;
         public string AppVersion => _appVersion;
 
