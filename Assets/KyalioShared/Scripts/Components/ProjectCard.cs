@@ -43,6 +43,11 @@ namespace Kyalio.Components
         /// </summary>
         public void Bind(Project project)
         {
+            // Lists rebind every card on each show (e.g. Search re-listing the whole cache on
+            // entry). A card still showing this exact project with its images loaded has
+            // nothing to update; rebinding would blank and re-set both images, dirtying them.
+            if (ReferenceEquals(project, _project) && ImagesLoaded()) return;
+
             _project = project;
             var repo = ProjectCacheRepository.Instance;
 
@@ -89,6 +94,12 @@ namespace Kyalio.Components
                     LoadProgramLogoAsync(ThumbnailLoader.Resolve(picUrl), _cts.Token).Forget();
             }
         }
+
+        // A shown image counts as loaded when it has a live sprite (a sprite destroyed by
+        // ThumbnailLoader.ClearCache on logout reads as null). Hidden images need nothing.
+        private bool ImagesLoaded() =>
+            (!thumbnail.gameObject.activeSelf || thumbnail.sprite != null) &&
+            (programLogo == null || !programLogo.gameObject.activeSelf || programLogo.sprite != null);
 
         private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
         {
