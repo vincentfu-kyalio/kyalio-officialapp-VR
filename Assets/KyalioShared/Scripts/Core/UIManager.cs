@@ -27,6 +27,10 @@ namespace Kyalio.Core
 
         [SerializeField] private PageEntry[] pages;
 
+        [Tooltip("Longest time a faded page switch stays black waiting for an IRevealGate page " +
+                 "(e.g. the video's first frame) before fading in anyway.")]
+        [SerializeField, Min(0f)] private float maxRevealWait = 3f;
+
         [System.Serializable]
         private class PageEntry
         {
@@ -107,16 +111,27 @@ namespace Kyalio.Core
         /// Pass null for param when no data needs to be forwarded.
         /// When fade is true (and a SceneFader exists), the page swap is hidden behind a
         /// fade out / fade in so the old and new pages never flicker against each other.
+        /// A page implementing <see cref="IRevealGate"/> keeps the screen black until it
+        /// is ready (at most maxRevealWait seconds).
         /// </summary>
         public void GoTo(PageType pageType, object param = null, bool fade = false)
         {
             if (fade && SceneFader.Instance != null)
             {
-                SceneFader.Instance.FadeOutThenIn(() => GoToImmediate(pageType, param));
+                SceneFader.Instance.FadeOutThenIn(
+                    () => GoToImmediate(pageType, param),
+                    holdWhile: () => !IsReadyToReveal(pageType),
+                    maxHold: maxRevealWait);
                 return;
             }
             GoToImmediate(pageType, param);
         }
+
+        // Pages without a gate are ready as soon as they are entered.
+        private bool IsReadyToReveal(PageType pageType) =>
+            !_pageMap.TryGetValue(pageType, out var handler) ||
+            handler is not IRevealGate gate ||
+            gate.IsReadyToReveal;
 
         private void GoToImmediate(PageType pageType, object param)
         {
