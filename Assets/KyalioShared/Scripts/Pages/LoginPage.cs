@@ -459,11 +459,15 @@ namespace Kyalio.Pages
         private void NavigateToHome()
         {
             Debug.Log("[LoginPage] Navigating to Home.");
-            if (_tabBarRoot != null)
-                _tabBarRoot.SetActive(true);
 
-            UIManager.Instance.SwitchPage(PageType.Home);
-            TabBar.Instance?.SelectTab(PageType.Home);
+            // Fade through black: the tab bar appears and Login becomes Home while the
+            // screen is dark, so the whole UI changes in one transition.
+            UIManager.Instance.SwitchPage(PageType.Home, fade: true, alongside: () =>
+            {
+                if (_tabBarRoot != null)
+                    _tabBarRoot.SetActive(true);
+                TabBar.Instance?.SelectTab(PageType.Home);
+            });
         }
 
         // ── Remember Me / password visibility ─────────────────────────

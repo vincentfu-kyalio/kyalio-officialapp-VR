@@ -34,9 +34,26 @@ namespace Kyalio.Components
         [SerializeField] private GameObject doneGroup;
         [SerializeField] private Button doneButton;
 
+        [Header("Transition")]
+        [SerializeField, Min(0f)] private float fadeInDuration  = 0.15f;
+        [SerializeField, Min(0f)] private float fadeOutDuration = 0.1f;
+
         private Action _primaryAction;
         private Action _secondaryAction;
         private bool _visible;
+
+        private CanvasGroup _group;
+        private Coroutine _fade;
+
+        private CanvasGroup Group
+        {
+            get
+            {
+                if (_group == null && !TryGetComponent(out _group))
+                    _group = gameObject.AddComponent<CanvasGroup>();
+                return _group;
+            }
+        }
 
         private void Awake()
         {
@@ -68,15 +85,45 @@ namespace Kyalio.Components
 
         private void OnSecondary() => Close(_secondaryAction);
 
-        // Hide before invoking, so a callback that opens the next popup is not closed by this one.
+        // Hide before invoking, so a callback that opens the next popup is not closed by this
+        // one: the fade-out starts first, and a Show from the callback simply reverses it.
         private void Close(Action action)
         {
             _visible = false;
             _primaryAction = null;
             _secondaryAction = null;
-            gameObject.SetActive(false);
+
+            // Stop taking clicks at once; the panel only stays up to fade out.
+            Group.blocksRaycasts = false;
+            Group.interactable   = false;
+            if (gameObject.activeInHierarchy && fadeOutDuration > 0f)
+                StartFade(0f, fadeOutDuration, deactivateAtEnd: true);
+            else
+                gameObject.SetActive(false);
 
             action?.Invoke();
+        }
+
+        private void StartFade(float target, float duration, bool deactivateAtEnd)
+        {
+            if (_fade != null) StopCoroutine(_fade);
+            _fade = StartCoroutine(FadeRoutine(target, duration, deactivateAtEnd));
+        }
+
+        // Fades from the current alpha, so reversing a half-finished fade does not jump.
+        private System.Collections.IEnumerator FadeRoutine(float target, float duration, bool deactivateAtEnd)
+        {
+            float from = Group.alpha;
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                Group.alpha = Mathf.Lerp(from, target, elapsed / duration);
+                yield return null;
+            }
+            Group.alpha = target;
+            _fade = null;
+            if (deactivateAtEnd) gameObject.SetActive(false);
         }
 
         private void Show(string message, GameObject activeGroup, Action primary, Action secondary)
@@ -97,8 +144,19 @@ namespace Kyalio.Components
             deleteCancelGroup.SetActive(deleteCancelGroup == activeGroup);
             doneGroup.SetActive(doneGroup == activeGroup);
 
+            bool wasHidden = !gameObject.activeSelf;
             _visible = true;
             gameObject.SetActive(true);
+
+            Group.blocksRaycasts = true;
+            Group.interactable   = true;
+            if (wasHidden) Group.alpha = 0f;   // else continue from a fade-out in progress
+            if (fadeInDuration > 0f) StartFade(1f, fadeInDuration, deactivateAtEnd: false);
+            else
+            {
+                if (_fade != null) { StopCoroutine(_fade); _fade = null; }
+                Group.alpha = 1f;
+            }
         }
     }
 }

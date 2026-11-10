@@ -102,7 +102,31 @@ namespace Kyalio.Core
         /// Clears the history stack so GoBack cannot leave the new page.
         /// Use this from TabBar; use GoTo for deep navigation within a tab.
         /// </summary>
-        public void SwitchPage(PageType pageType)
+        public void SwitchPage(PageType pageType) => SwitchPage(pageType, fade: false);
+
+        /// <summary>
+        /// SwitchPage with an optional black SceneFader fade, for a change of whole context
+        /// (e.g. Login → main UI). <paramref name="alongside"/> runs together with the
+        /// switch — behind the black when fading — for other UI that changes with it,
+        /// such as showing the tab bar.
+        /// </summary>
+        public void SwitchPage(PageType pageType, bool fade, System.Action alongside = null)
+        {
+            void Switch()
+            {
+                alongside?.Invoke();
+                SwitchPageImmediate(pageType);
+            }
+
+            if (fade && SceneFader.Instance != null)
+            {
+                SceneFader.Instance.FadeOutThenIn(() => BehindFade(Switch));
+                return;
+            }
+            Switch();
+        }
+
+        private void SwitchPageImmediate(PageType pageType)
         {
             if (_currentPage.HasValue)
                 ExitPage(_currentPage.Value);
