@@ -36,17 +36,32 @@ namespace Kyalio.State.V2
 
         public void SetLoggedIn() => IsLoggedIn = true;
 
-        public void SetWatchHistory(List<WatchHistoryItem> items)
+        /// <summary>
+        /// Stores a fetched list. <paramref name="fetchedAtVersion"/> is the
+        /// <see cref="WatchHistoryVersion"/> the request started at: a request that began
+        /// before the list was marked dirty again stores its (older) data but leaves the
+        /// list dirty, so the next visit fetches the change.
+        /// </summary>
+        public void SetWatchHistory(List<WatchHistoryItem> items, int fetchedAtVersion)
         {
+            // An older request finishing after a newer one must not overwrite its list.
+            if (WatchHistory != null && fetchedAtVersion < _storedWatchHistoryVersion) return;
+            _storedWatchHistoryVersion = fetchedAtVersion;
             WatchHistory = items;
-            WatchHistoryDirty = false;
+            if (fetchedAtVersion == WatchHistoryVersion) WatchHistoryDirty = false;
         }
 
-        public void SetFavorites(List<FavoriteItem> items)
+        /// <summary>As <see cref="SetWatchHistory"/>, for Favorites.</summary>
+        public void SetFavorites(List<FavoriteItem> items, int fetchedAtVersion)
         {
+            if (Favorites != null && fetchedAtVersion < _storedFavoritesVersion) return;
+            _storedFavoritesVersion = fetchedAtVersion;
             Favorites = items;
-            FavoritesDirty = false;
+            if (fetchedAtVersion == FavoritesVersion) FavoritesDirty = false;
         }
+
+        private int _storedWatchHistoryVersion;
+        private int _storedFavoritesVersion;
 
         public void SetHome(HomeResponse home)
         {
@@ -59,8 +74,13 @@ namespace Kyalio.State.V2
         public bool WatchHistoryDirty { get; private set; } = true;
         public bool FavoritesDirty { get; private set; } = true;
 
-        public void MarkWatchHistoryDirty()   => WatchHistoryDirty = true;
-        public void MarkFavoritesDirty()      => FavoritesDirty    = true;
+        /// <summary>Bumped on every MarkWatchHistoryDirty; tells a stale in-flight fetch apart.</summary>
+        public int WatchHistoryVersion { get; private set; }
+        /// <summary>Bumped on every MarkFavoritesDirty.</summary>
+        public int FavoritesVersion { get; private set; }
+
+        public void MarkWatchHistoryDirty() { WatchHistoryDirty = true; WatchHistoryVersion++; }
+        public void MarkFavoritesDirty()    { FavoritesDirty    = true; FavoritesVersion++; }
 
         public static void Reset()
         {

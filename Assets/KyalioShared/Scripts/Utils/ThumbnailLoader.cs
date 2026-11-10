@@ -154,6 +154,7 @@ namespace Kyalio.Utils
                 return;
             }
 
+            bool slotHeld = true;
             try
             {
                 // nonReadable: the texture lives on the GPU only, no CPU-side copy.
@@ -180,6 +181,11 @@ namespace Kyalio.Utils
                     Finish(url, load, null);
                     return;
                 }
+
+                // The transfer is done: free the download slot now, so other cards' downloads
+                // start while this one waits for its texture-creation frame.
+                _concurrencyLimit.Release();
+                slotHeld = false;
 
                 // Turning the bytes into a GPU texture is main-thread work; several downloads
                 // finishing together (a row scrolling into a virtualised list) would stack it
@@ -212,7 +218,7 @@ namespace Kyalio.Utils
             }
             finally
             {
-                _concurrencyLimit.Release();
+                if (slotHeld) _concurrencyLimit.Release();
             }
         }
 

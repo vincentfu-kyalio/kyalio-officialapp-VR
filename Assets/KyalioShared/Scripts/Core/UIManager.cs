@@ -108,14 +108,17 @@ namespace Kyalio.Core
         /// SwitchPage with an optional black SceneFader fade, for a change of whole context
         /// (e.g. Login → main UI). <paramref name="alongside"/> runs together with the
         /// switch — behind the black when fading — for other UI that changes with it,
-        /// such as showing the tab bar.
+        /// such as showing the tab bar. <paramref name="afterSwitch"/> runs once the new page
+        /// has been entered (still behind the black), e.g. a popup to show over it.
         /// </summary>
-        public void SwitchPage(PageType pageType, bool fade, System.Action alongside = null)
+        public void SwitchPage(PageType pageType, bool fade, System.Action alongside = null,
+            System.Action afterSwitch = null)
         {
             void Switch()
             {
                 alongside?.Invoke();
                 SwitchPageImmediate(pageType);
+                afterSwitch?.Invoke();
             }
 
             if (fade && SceneFader.Instance != null)

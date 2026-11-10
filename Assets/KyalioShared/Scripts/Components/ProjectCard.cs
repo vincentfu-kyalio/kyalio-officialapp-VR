@@ -46,7 +46,14 @@ namespace Kyalio.Components
             // Lists rebind every card on each show (e.g. Search re-listing the whole cache on
             // entry). A card still showing this exact project with its images loaded has
             // nothing to update; rebinding would blank and re-set both images, dirtying them.
-            if (ReferenceEquals(project, _project) && ImagesLoaded()) return;
+            if (ReferenceEquals(project, _project) && ImagesLoaded())
+            {
+                // A fade-in cut short when the card was hidden (deactivation stops the
+                // tween) would otherwise leave the image dim or transparent.
+                ImageReveal.Reset(thumbnail);
+                ImageReveal.Reset(programLogo);
+                return;
+            }
 
             _project = project;
             var repo = ProjectCacheRepository.Instance;
@@ -91,7 +98,10 @@ namespace Kyalio.Components
             {
                 var picUrl = repo.GetFirstProgram(project)?.PicUrl;
                 programLogo.gameObject.SetActive(!string.IsNullOrEmpty(picUrl));
-                ImageReveal.HideUntilLoaded(programLogo);   // no stale logo from the previous project
+                // No stale logo from the previous project: if this load is cancelled, the
+                // card must not count as loaded with the old sprite (see ImagesLoaded).
+                programLogo.sprite = null;
+                ImageReveal.HideUntilLoaded(programLogo);
                 if (!string.IsNullOrEmpty(picUrl))
                     LoadProgramLogoAsync(ThumbnailLoader.Resolve(picUrl), _cts.Token).Forget();
             }

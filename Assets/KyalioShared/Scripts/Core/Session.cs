@@ -53,16 +53,18 @@ namespace Kyalio.Core
 
         // Back to the pairing screen, clearing navigation history; the tab bar is hidden by
         // LoginPage.OnEnter.
+        // thenOnLogin runs once Login is up (behind the black when fading).
         private static void ReturnToLogin(Action thenOnLogin = null)
         {
             var ui = UIManager.Instance;
             if (ui == null)
             {
                 ClearSessionState();
+                thenOnLogin?.Invoke();
                 return;
             }
-            ui.SwitchPage(PageType.Login, fade: true, alongside: ClearSessionState);
-            thenOnLogin?.Invoke();
+            ui.SwitchPage(PageType.Login, fade: true, alongside: ClearSessionState,
+                afterSwitch: thenOnLogin);
         }
 
         /// <summary>
@@ -79,8 +81,8 @@ namespace Kyalio.Core
             AuthStorage.ClearCredential();
             ServiceLocator.Instance.ApiClient.ClearToken();
 
-            // The popup opens at once and fades over the transition, so the reason for
-            // being signed out is up before the main UI goes dark.
+            // The popup opens while the screen is black, together with Login, so it fades in
+            // over a stable Login screen.
             ReturnToLogin(() =>
                 PopupManager.Instance?.ShowDone("Your session has expired. Please sign in again."));
         }

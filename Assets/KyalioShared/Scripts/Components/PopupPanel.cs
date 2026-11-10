@@ -183,7 +183,10 @@ namespace Kyalio.Components
             Group.blocksRaycasts = true;
             Group.interactable   = true;
             if (wasHidden) Group.alpha = 0f;   // else continue from a fade-out in progress
-            if (fadeInDuration > 0f) StartFade(1f, fadeInDuration, deactivateAtEnd: false);
+            // A coroutine cannot start under an inactive parent; show fully instead of
+            // leaving an invisible popup that still blocks input.
+            if (fadeInDuration > 0f && gameObject.activeInHierarchy)
+                StartFade(1f, fadeInDuration, deactivateAtEnd: false);
             else
             {
                 if (_fade != null) { StopCoroutine(_fade); _fade = null; }

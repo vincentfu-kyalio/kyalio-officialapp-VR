@@ -114,6 +114,10 @@ namespace Kyalio.Pages
         private bool _awaitingResumeSeek;
         private float _gateStartedAt;
 
+        // True once CurrentPositionMs holds this video's real position (see Update). Until
+        // then nothing is synced, so backing out early keeps the saved resume point.
+        private bool _positionValid;
+
         // Fallback if a platform never reports FirstFrameReady / FinishedSeeking: once
         // playing this long, treat the media as settled so the scrub bar is not frozen.
         private const float GateFallbackSeconds = 3f;
@@ -248,8 +252,14 @@ namespace Kyalio.Pages
                 _preventSliderCallback = false;
             }
 
-            if (settled) UpdateTimeText(current, duration);
-            AppPlaybackState.Instance.CurrentPositionMs = (long)(current * 1000.0);
+            if (settled)
+            {
+                UpdateTimeText(current, duration);
+                // Only a settled player reports this video's real position; before that it
+                // is the previous video's time or 0, which must never be saved as progress.
+                AppPlaybackState.Instance.CurrentPositionMs = (long)(current * 1000.0);
+                _positionValid = true;
+            }
             RefreshPlayPauseButton();
 
             // Auto-hide the controls after inactivity, but only while actually
@@ -263,7 +273,7 @@ namespace Kyalio.Pages
             }
 
             // Periodic watch-history sync while playing
-            if (_mediaPlayer.Control.IsPlaying() && !DevFlags.UseFakeData)
+            if (_mediaPlayer.Control.IsPlaying() && _positionValid && !DevFlags.UseFakeData)
             {
                 _watchSyncTimer += Time.deltaTime;
                 if (_watchSyncTimer >= WatchSyncIntervalSecs)
@@ -287,6 +297,7 @@ namespace Kyalio.Pages
             _firstFrameReady    = false;
             _awaitingResumeSeek = false;
             _gateStartedAt      = Time.unscaledTime;
+            _positionValid      = false;
 
             if (_avProRoot != null) _avProRoot.SetActive(true);
 
@@ -334,7 +345,7 @@ namespace Kyalio.Pages
 
             // Save final progress with a fresh token — page is closing but the request
             // must be allowed to complete.
-            if (!DevFlags.UseFakeData && _currentItem != null)
+            if (!DevFlags.UseFakeData && _currentItem != null && _positionValid)
                 SyncWatchProgressAsync(CancellationToken.None).Forget();
 
             AppState.Instance.MarkWatchHistoryDirty();
@@ -550,6 +561,7 @@ namespace Kyalio.Pages
             _firstFrameReady    = false;
             _awaitingResumeSeek = false;
             _gateStartedAt      = Time.unscaledTime;
+            _positionValid      = false;
             ShowStartPosition(_currentItem);
             _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
             RefreshNavButtons();

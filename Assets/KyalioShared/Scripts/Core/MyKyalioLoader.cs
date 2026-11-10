@@ -31,22 +31,22 @@ namespace Kyalio.Core
 
         /// <summary>Fetches Recently Watched (mode = project) into AppState.WatchHistory.</summary>
         public static UniTask<List<WatchHistoryItem>> FetchWatchHistoryAsync() =>
-            s_watchHistory.Run(async state =>
+            s_watchHistory.Run(AppState.Instance.WatchHistoryVersion, async (state, version) =>
             {
                 var response = await ServiceLocator.Instance.V2.WatchHistory.GetHistoryAsync(
                     mode: WatchHistoryMode.Project, limit: WatchHistoryLimit, ct: state.SessionToken);
                 var items = response?.Items ?? new List<WatchHistoryItem>();
-                if (state == AppState.Instance) state.SetWatchHistory(items);
+                if (state == AppState.Instance) state.SetWatchHistory(items, version);
                 return items;
             });
 
         /// <summary>Fetches Favorites into AppState.Favorites.</summary>
         public static UniTask<List<FavoriteItem>> FetchFavoritesAsync() =>
-            s_favorites.Run(async state =>
+            s_favorites.Run(AppState.Instance.FavoritesVersion, async (state, version) =>
             {
                 var response = await ServiceLocator.Instance.V2.Favorites.GetFavoritesAsync(state.SessionToken);
                 var items = response?.Items ?? new List<FavoriteItem>();
-                if (state == AppState.Instance) state.SetFavorites(items);
+                if (state == AppState.Instance) state.SetFavorites(items, version);
                 return items;
             });
 
@@ -60,7 +60,7 @@ namespace Kyalio.Core
         /// Account menu. Joins a fetch already running for this session.
         /// </summary>
         public static UniTask<MeResponse> FetchAccountAsync() =>
-            s_account.Run(async state =>
+            s_account.Run(0, async (state, _) =>
             {
                 var me = await ServiceLocator.Instance.V2.Auth.GetMeAsync(state.SessionToken);
                 if (state == AppState.Instance) state.SetAccount(me);
@@ -119,20 +119,26 @@ namespace Kyalio.Core
             }
         }
 
-        /// <summary>One in-flight request per session; callers arriving while it runs share it.</summary>
+        /// <summary>
+        /// One in-flight request per session and data version; callers arriving while it
+        /// runs share it. A request started before the data was marked dirty again (an
+        /// older version) is not joined: it would return the data from before the change.
+        /// </summary>
         private sealed class SharedFetch<T>
         {
             private UniTask<T> _task;
             private AppState _state;
+            private int _version;
 
-            public UniTask<T> Run(Func<AppState, UniTask<T>> fetch)
+            public UniTask<T> Run(int version, Func<AppState, int, UniTask<T>> fetch)
             {
                 var state = AppState.Instance;
-                if (_state == state && !_task.Status.IsCompleted())
+                if (_state == state && _version == version && !_task.Status.IsCompleted())
                     return _task;
 
                 _state = state;
-                _task = fetch(state).Preserve();
+                _version = version;
+                _task = fetch(state, version).Preserve();
                 return _task;
             }
         }
