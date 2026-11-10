@@ -131,6 +131,15 @@ namespace Kyalio.Components
             action?.Invoke();
         }
 
+        // A parent hidden mid-fade kills the fade coroutine. If the popup was closing, finish
+        // the close as fully transparent (it already ignores clicks), so it cannot come back
+        // as a half-visible ghost when the parent is shown again; the next Show fades it in.
+        private void OnDisable()
+        {
+            _fade = null;
+            if (!_visible && _group != null) _group.alpha = 0f;
+        }
+
         private void StartFade(float target, float duration, bool deactivateAtEnd)
         {
             if (_fade != null) StopCoroutine(_fade);

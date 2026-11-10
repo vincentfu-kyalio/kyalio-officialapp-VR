@@ -294,11 +294,6 @@ namespace Kyalio.Pages
                 _currentItem = t.Item2;
             }
 
-            _firstFrameReady    = false;
-            _awaitingResumeSeek = false;
-            _gateStartedAt      = Time.unscaledTime;
-            _positionValid      = false;
-
             if (_avProRoot != null) _avProRoot.SetActive(true);
 
             // 球體啟用後立刻置中：球心對到眼睛高度，影片正面轉向使用者當下的朝向。
@@ -329,7 +324,6 @@ namespace Kyalio.Pages
 
             SetSpeed(1f);
             RefreshNavButtons();
-            ShowStartPosition(_currentItem);
             // Keep the user's Loop choice from the toggle; it persists across
             // episodes and media re-opens (AVPro stores it on the MediaPlayer).
             SetLoop(_loopToggle != null && _loopToggle.isOn);
@@ -369,6 +363,15 @@ namespace Kyalio.Pages
         private async UniTaskVoid LoadAndPlayAsync(
             string projectId, PlaylistItem item, CancellationToken ct)
         {
+            // Every media open (page entry, auto-advance, Next / Prev) comes through here:
+            // reset the reveal gate and the position guard, and show where this video will
+            // start, before the player reports anything for it.
+            _firstFrameReady    = false;
+            _awaitingResumeSeek = false;
+            _gateStartedAt      = Time.unscaledTime;
+            _positionValid      = false;
+            ShowStartPosition(item);
+
             if (string.IsNullOrEmpty(item?.VideoId)) { RevealNow(); return; }
 
             int resumeMs = ProjectCacheRepository.Instance.GetProgressMs(item.VideoId);
@@ -558,11 +561,6 @@ namespace Kyalio.Pages
 
             state.AdvancePlaylist();
             _currentItem = state.Playlist[state.PlaylistIndex];
-            _firstFrameReady    = false;
-            _awaitingResumeSeek = false;
-            _gateStartedAt      = Time.unscaledTime;
-            _positionValid      = false;
-            ShowStartPosition(_currentItem);
             _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
             RefreshNavButtons();
 

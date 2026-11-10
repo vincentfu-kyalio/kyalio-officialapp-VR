@@ -95,6 +95,17 @@ namespace Kyalio.Components
         /// <summary>Rebinds the cards in view without changing the count or the layout (e.g. after a selection change).</summary>
         public void RebindShown() => Refresh(force: true);
 
+        /// <summary>
+        /// Runs a light update on every card currently shown (e.g. toggling edit mode),
+        /// without the full bind — which would cancel and reload the card's images.
+        /// Cards scrolled into view later get the full bind as usual.
+        /// </summary>
+        public void ForEachShown(Action<T, int> update)
+        {
+            foreach (var kv in _shown)
+                update(kv.Value, kv.Key);
+        }
+
         public void Dispose()
         {
             if (_scroller != null) _scroller.onValueChanged.RemoveListener(OnScrolled);

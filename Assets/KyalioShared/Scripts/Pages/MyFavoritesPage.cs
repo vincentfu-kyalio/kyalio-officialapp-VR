@@ -286,9 +286,19 @@ namespace Kyalio.Pages
             var r = _rows[index];
             item.Bind(r.ProjectId, r.Title, r.Category, r.DrName, r.ThumbnailUrl, r.ProgramPicUrl,
                 r.VideoCount, r.SizeLabel);
-            item.SetEditMode(_isEditMode);   // leaving edit mode also clears the toggle
-            if (_isEditMode) item.SetSelected(_selectedIds.Contains(r.ProjectId));
+            ApplySelectionState(item, index);
         }
+
+        private void ApplySelectionState(SelectableListItem item, int index)
+        {
+            item.SetEditMode(_isEditMode);   // leaving edit mode also clears the toggle
+            if (_isEditMode && index < _rows.Count)
+                item.SetSelected(_selectedIds.Contains(_rows[index].ProjectId));
+        }
+
+        // Edit mode / selection changes only touch the toggles of the rows on screen; a
+        // full rebind would cancel and reload every visible thumbnail and logo.
+        private void RefreshSelectionShown() => _grid?.ForEachShown(ApplySelectionState);
 
         // Server total, falling back to the playlist sum (same as ProjectInfoPage).
         private static long ProjectSizeBytes(Project p)
@@ -318,7 +328,7 @@ namespace Kyalio.Pages
             selectAllToggle.gameObject.SetActive(true);
             selectAllToggle.SetIsOnWithoutNotify(false);
 
-            _grid?.RebindShown();
+            RefreshSelectionShown();
             RefreshDeleteButton();
         }
 
@@ -332,7 +342,7 @@ namespace Kyalio.Pages
             cancelButton.gameObject.SetActive(false);
             selectAllToggle.gameObject.SetActive(false);
 
-            _grid?.RebindShown();
+            RefreshSelectionShown();
             RefreshDeleteButton();
         }
 
@@ -354,7 +364,7 @@ namespace Kyalio.Pages
                 foreach (var r in _rows)
                     _selectedIds.Add(r.ProjectId);
 
-            _grid?.RebindShown();
+            RefreshSelectionShown();
             RefreshDeleteButton();
         }
 

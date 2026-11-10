@@ -54,8 +54,19 @@ public class SceneFader : MonoBehaviour
     public void FadeOutThenIn(System.Action onBlack, System.Func<bool> holdWhile, float maxHold,
         float duration = -1f)
     {
+        // No fade possible (FadeSphere inactive): switch at once rather than losing the
+        // action — logout and session expiry depend on it running.
+        if (!isActiveAndEnabled)
+        {
+            try { onBlack?.Invoke(); }
+            catch (System.Exception e) { Debug.LogException(e); }
+            return;
+        }
+
         _pendingOnBlack.Add(onBlack);
-        if (holdWhile != null) _holds.Add((holdWhile, Time.unscaledTime + maxHold));
+        // The wait limit counts from when the screen is black (see Transition), so the
+        // fade-out time does not eat into it.
+        if (holdWhile != null) _holds.Add((holdWhile, maxHold));
 
         if (_phase == Phase.FadingOut) return;          // runs when the running fade-out reaches black
         if (_phase == Phase.Holding) { RunPending(); return; }
@@ -84,7 +95,8 @@ public class SceneFader : MonoBehaviour
     Phase _phase = Phase.Idle;
     float _alpha;
     readonly System.Collections.Generic.List<System.Action> _pendingOnBlack = new();
-    readonly System.Collections.Generic.List<(System.Func<bool> holdWhile, float until)> _holds = new();
+    readonly System.Collections.Generic.List<(System.Func<bool> holdWhile, float maxHold)> _holds = new();
+    float _blackSince;   // unscaled time the screen reached black
 
     IEnumerator Transition(float duration)
     {
@@ -93,6 +105,7 @@ public class SceneFader : MonoBehaviour
         yield return FadeRoutine(_alpha, 1f, duration * (1f - _alpha), null);
 
         _phase = Phase.Holding;
+        _blackSince = Time.unscaledTime;
         RunPending();
         while (AnyHolding())
         {
@@ -121,12 +134,14 @@ public class SceneFader : MonoBehaviour
 
     bool AnyHolding()
     {
-        foreach (var (holdWhile, until) in _holds)
+        float heldFor = Time.unscaledTime - _blackSince;
+        foreach (var (holdWhile, maxHold) in _holds)
         {
+            if (heldFor >= maxHold) continue;
             bool waiting;
             try { waiting = holdWhile(); }
             catch (System.Exception e) { Debug.LogException(e); waiting = false; }
-            if (waiting && Time.unscaledTime < until) return true;
+            if (waiting) return true;
         }
         return false;
     }

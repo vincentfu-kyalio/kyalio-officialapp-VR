@@ -227,9 +227,17 @@ namespace Kyalio.Pages
             }
         }
 
-        private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
+        // The cover can be requested twice per visit (cached URL, then the fresh detail's);
+        // each request cancels the previous one, so a slow stale download never lands last.
+        private CancellationTokenSource _thumbnailCts;
+
+        private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken pageCt)
         {
             if (thumbnailImage == null) return;
+
+            _thumbnailCts?.Cancel();   // not disposed: the previous load may still read its token
+            _thumbnailCts =CancellationTokenSource.CreateLinkedTokenSource(pageCt);
+            var ct = _thumbnailCts.Token;
 
             thumbnailImage.sprite = null;
             thumbnailImage.color  = new Color32(43, 43, 43, 255);
@@ -273,6 +281,7 @@ namespace Kyalio.Pages
             ClearPlaylistRows();
             if (overallProgressSlider != null) overallProgressSlider.gameObject.SetActive(false);
 
+            _thumbnailCts?.Cancel();   // a cover still loading must not land on the empty page
             if (thumbnailImage != null)
             {
                 thumbnailImage.sprite = null;
