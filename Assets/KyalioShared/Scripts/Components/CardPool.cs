@@ -64,16 +64,30 @@ namespace Kyalio.Components
             return item;
         }
 
-        public void ReturnAll()
+        /// <summary>
+        /// Rebinding in place: returns the item already showing at <paramref name="index"/>,
+        /// or a new one from <see cref="Get"/> past the end. Bind items 0..n-1 in order,
+        /// then call <see cref="TrimTo"/>(n). Re-showing a list this way only toggles the
+        /// difference in count — deactivating and reactivating every item would rebuild
+        /// all of their graphics and the layout.
+        /// </summary>
+        public T GetOrReuse(int index) => index < _active.Count ? _active[index] : Get();
+
+        public void ReturnAll() => TrimTo(0);
+
+        /// <summary>Keeps the first <paramref name="count"/> handed-out items and returns the rest.</summary>
+        public void TrimTo(int count)
         {
-            foreach (var item in _active)
+            if (count < 0) count = 0;
+            for (int i = _active.Count - 1; i >= count; i--)
             {
+                var item = _active[i];
+                _active.RemoveAt(i);
                 if (item == null) continue;
                 _onReturn?.Invoke(item);
                 item.gameObject.SetActive(false);
                 _free.Add(item);
             }
-            _active.Clear();
         }
     }
 }

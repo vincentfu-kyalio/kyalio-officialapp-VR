@@ -35,6 +35,7 @@ namespace Kyalio.Components
 
             if (progressBar != null)
                 progressBar.interactable = false;
+            SliderFillClip.Install(progressBar);
         }
 
         public void Bind(string projectId, PlaylistItem item, int progressMs)
@@ -61,6 +62,7 @@ namespace Kyalio.Components
 
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnail);
             bool hasThumbnail = !string.IsNullOrEmpty(item.ThumbnailUrl);
             thumbnail.gameObject.SetActive(hasThumbnail);
             if (hasThumbnail)
@@ -69,12 +71,10 @@ namespace Kyalio.Components
 
         private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-            {
-                thumbnail.sprite = sprite;
-                thumbnail.color  = Color.white;
-            }
+                ImageReveal.ShowThumbnail(thumbnail, sprite, startFrame);
         }
 
         private static string FormatDuration(int durationMs)

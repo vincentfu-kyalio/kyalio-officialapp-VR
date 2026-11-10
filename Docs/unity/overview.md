@@ -99,7 +99,7 @@ Rules:
 2. On launch, optionally call `GET /api/app/version-check` with `X-App-Key` and `X-App-Version` before refresh/login UI work.
 3. If any endpoint returns `426 APP_VERSION_UNSUPPORTED`, show the forced-update UI and stop normal API flow.
 4. Call `POST /api/auth/login` with `X-App-Key` when the user needs to sign in.
-5. Store `credential.accessToken`, `credential.expiresAt`, `credential.refreshToken`, and `credential.refreshTokenExpiresAt` securely.
+5. Store `credential.accessToken`, `credential.expiresAt`, `credential.refreshToken`, and `credential.refreshTokenExpiresAt` securely. Call `GET /api/me` to show the signed-in account.
 6. Call `GET /api/me/sync`.
 7. Diff local cache state against server state.
 8. Call `POST /api/projects/batch` for missing / outdated granted projects.
@@ -120,7 +120,7 @@ Rules:
 4. Sign in with either method:
    - **Pairing:** call `POST /api/pair/request` with `X-Quest-Key`, display the 6-digit `code`, and open an SSE connection to `GET /api/pair/stream/{code}` with `X-Quest-Key`. On `verified`, close the connection.
    - **Email and password:** call `POST /api/auth/quest/login` with `X-Quest-Key`. If it returns `409` with a `ticket`, show the confirmation and call `POST /api/auth/quest/login/confirm` with the ticket.
-5. Store `credential.accessToken` and `credential.expiresAt`. Both methods return the same credential.
+5. Store `credential.accessToken` and `credential.expiresAt`. Both methods return the same credential. Call `GET /api/me` to show the signed-in account.
 6. Call `GET /api/me/sync`.
 7. Fetch required projects via `POST /api/projects/batch`.
 8. Call `GET /api/me/progress` for full progress sync on cold start, or `GET /api/me/progress?since=...` on resume.
@@ -208,6 +208,7 @@ All non-admin Unity client endpoints except `POST /api/auth/logout` require `X-A
 ### Bearer Required (Mobile + Quest)
 
 - `POST /api/pair/verify` _(Mobile only)_
+- `GET /api/me`
 - `GET /api/me/sync`
 - `GET /api/me/progress`
 - `POST /api/projects/batch`

@@ -24,6 +24,7 @@ Each entry should link to the relevant spec file (`unity/*.md`, `cms-admin-api.m
 
 ### Added
 
+- `GET /api/me`: the signed-in member's `email` and `name` (display name, or `null`), for mobile and Quest tokens, so both Quest sign-in methods can show the account. See [`unity/auth.md`](unity/auth.md#current-account).
 - `POST /api/auth/quest/login`: Quest sign-in with email and password, as an alternative to 6-digit pairing. It returns the same session-bound, non-refreshable Quest credential and shares rate limits with `POST /api/auth/login`. If it would end another active Quest session, it returns `409` with a ticket; confirm with `POST /api/auth/quest/login/confirm`. See [`unity/auth.md`](unity/auth.md#quest-password-login).
 - `POST /api/auth/forgot-password` now also accepts `X-Quest-Key`, so the Quest app can request a password reset email. See [`unity/auth.md`](unity/auth.md#forgot-password).
 - `fullName` on `POST /api/admin/members` and `full_name` on `PATCH /api/admin/members/{id}` (D1 only, not synced to PlayFab). See [`cms-admin-api.md`](cms-admin-api.md#update-member-display-name).

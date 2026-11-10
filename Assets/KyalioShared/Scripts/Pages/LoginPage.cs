@@ -442,6 +442,11 @@ namespace Kyalio.Pages
             if (ct.IsCancellationRequested || string.IsNullOrEmpty(ServiceLocator.Instance.ApiClient.Token))
                 return;
 
+            // Background: My Kyalio's lists and first thumbnails are ready before it opens.
+            // Its thumbnails wait for Home's, so Home is not slowed down.
+            MyKyalioLoader.Prefetch();
+            MyKyalioLoader.PrefetchAccount();   // shown in the Account menu
+
             SetBusy(false);
 
             if (string.IsNullOrEmpty(successMessage) || PopupManager.Instance == null)
@@ -455,11 +460,15 @@ namespace Kyalio.Pages
         private void NavigateToHome()
         {
             Debug.Log("[LoginPage] Navigating to Home.");
-            if (_tabBarRoot != null)
-                _tabBarRoot.SetActive(true);
 
-            UIManager.Instance.SwitchPage(PageType.Home);
-            TabBar.Instance?.SelectTab(PageType.Home);
+            // Fade through black: the tab bar appears and Login becomes Home while the
+            // screen is dark, so the whole UI changes in one transition.
+            UIManager.Instance.SwitchPage(PageType.Home, fade: true, alongside: () =>
+            {
+                if (_tabBarRoot != null)
+                    _tabBarRoot.SetActive(true);
+                TabBar.Instance?.SelectTab(PageType.Home);
+            });
         }
 
         // ── Remember Me / password visibility ─────────────────────────

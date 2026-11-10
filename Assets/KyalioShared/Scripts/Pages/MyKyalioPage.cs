@@ -39,7 +39,6 @@ namespace Kyalio.Pages
         private Tab _activeTab;
         private MyFavoritesPage _activeListPanel;
         private CancellationTokenSource _cts;
-        private List<WatchHistoryItem> _watchHistoryCache;
 
         private void Awake()
         {
@@ -109,28 +108,26 @@ namespace Kyalio.Pages
 
         // ── Recently Watched ──────────────────────────────────────────
 
+        // Shows the list from AppState at once (usually prefetched after login), then
+        // fetches again only if a playback marked it dirty. Joins the prefetch when it is
+        // still running.
         private async UniTaskVoid LoadRecentlyWatchedAsync(CancellationToken ct)
         {
-            bool needsFresh = AppState.Instance.WatchHistoryDirty || _watchHistoryCache == null;
+            var state  = AppState.Instance;
+            var cached = state.WatchHistory;
 
-            if (_watchHistoryCache != null)
-                BindRecentlyWatched(_watchHistoryCache);
+            if (cached != null)
+                BindRecentlyWatched(cached);
 
-            if (!needsFresh) return;
+            if (cached != null && !state.WatchHistoryDirty) return;
 
             try
             {
-                var response = await ServiceLocator.Instance.V2.WatchHistory
-                    .GetHistoryAsync(mode: WatchHistoryMode.Project, limit: 20, ct: ct);
+                var fresh = await MyKyalioLoader.FetchWatchHistoryAsync().AttachExternalCancellation(ct);
                 if (ct.IsCancellationRequested) return;
 
-                var fresh = response?.Items ?? new List<WatchHistoryItem>();
-
-                if (!SameProjectOrder(_watchHistoryCache, fresh))
+                if (!SameHistory(cached, fresh))
                     BindRecentlyWatched(fresh);
-
-                _watchHistoryCache = fresh;
-                AppState.Instance.ClearWatchHistoryDirty();
             }
             catch (OperationCanceledException) { }
             catch (Exception e) { Debug.LogError($"[MyKyalioPage] Watch history load failed: {e.Message}"); }
@@ -145,13 +142,19 @@ namespace Kyalio.Pages
             recentlyWatchedPanel.Bind("Recently Watched", items);
         }
 
-        private static bool SameProjectOrder(
+        // Same cards in the same order, each on the same episode with the same progress.
+        // Comparing projects alone missed a newer episode or progress on the top project.
+        private static bool SameHistory(
             List<WatchHistoryItem> a, List<WatchHistoryItem> b)
         {
             if (a == null || b == null) return false;
             if (a.Count != b.Count) return false;
             for (int i = 0; i < a.Count; i++)
-                if (a[i].ProjectId != b[i].ProjectId) return false;
+                if (a[i].ProjectId  != b[i].ProjectId  ||
+                    a[i].VideoId    != b[i].VideoId    ||
+                    a[i].ProgressMs != b[i].ProgressMs ||
+                    a[i].ProgressUpdatedAt != b[i].ProgressUpdatedAt)
+                    return false;
             return true;
         }
 

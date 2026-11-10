@@ -1460,6 +1460,7 @@ MonoBehaviour:
   categoryText: {fileID: 753774794633498305}
   drNameText: {fileID: 0}
   videoCountText: {fileID: 2578244557401590442}
+  sizeText: {fileID: 172406448301651209}
   isListSign: {fileID: 8343185999122634763}
   toggleContainer: {fileID: 1366094771410769769}
   toggle: {fileID: 8974478788335652431}

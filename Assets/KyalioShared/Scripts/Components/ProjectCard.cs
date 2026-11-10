@@ -43,6 +43,18 @@ namespace Kyalio.Components
         /// </summary>
         public void Bind(Project project)
         {
+            // Lists rebind every card on each show (e.g. Search re-listing the whole cache on
+            // entry). A card still showing this exact project with its images loaded has
+            // nothing to update; rebinding would blank and re-set both images, dirtying them.
+            if (ReferenceEquals(project, _project) && ImagesLoaded())
+            {
+                // A fade-in cut short when the card was hidden (deactivation stops the
+                // tween) would otherwise leave the image dim or transparent.
+                ImageReveal.Reset(thumbnail);
+                ImageReveal.Reset(programLogo);
+                return;
+            }
+
             _project = project;
             var repo = ProjectCacheRepository.Instance;
 
@@ -75,6 +87,7 @@ namespace Kyalio.Components
             // Thumbnail
             thumbnail.sprite = null;
             thumbnail.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnail);
             bool hasThumbnail = !string.IsNullOrEmpty(project.ThumbnailUrl);
             thumbnail.gameObject.SetActive(hasThumbnail);
             if (hasThumbnail)
@@ -85,19 +98,27 @@ namespace Kyalio.Components
             {
                 var picUrl = repo.GetFirstProgram(project)?.PicUrl;
                 programLogo.gameObject.SetActive(!string.IsNullOrEmpty(picUrl));
+                // No stale logo from the previous project: if this load is cancelled, the
+                // card must not count as loaded with the old sprite (see ImagesLoaded).
+                programLogo.sprite = null;
+                ImageReveal.HideUntilLoaded(programLogo);
                 if (!string.IsNullOrEmpty(picUrl))
                     LoadProgramLogoAsync(ThumbnailLoader.Resolve(picUrl), _cts.Token).Forget();
             }
         }
 
+        // A shown image counts as loaded when it has a live sprite (a sprite destroyed by
+        // ThumbnailLoader.ClearCache on logout reads as null). Hidden images need nothing.
+        private bool ImagesLoaded() =>
+            (!thumbnail.gameObject.activeSelf || thumbnail.sprite != null) &&
+            (programLogo == null || !programLogo.gameObject.activeSelf || programLogo.sprite != null);
+
         private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-            {
-                thumbnail.sprite = sprite;
-                thumbnail.color  = Color.white;
-            }
+                ImageReveal.ShowThumbnail(thumbnail, sprite, startFrame);
         }
 
         private static string FormatDuration(int totalSeconds)
@@ -111,9 +132,10 @@ namespace Kyalio.Components
 
         private async UniTaskVoid LoadProgramLogoAsync(string url, CancellationToken ct)
         {
+            int startFrame = Time.frameCount;
             var sprite = await ThumbnailLoader.LoadAsync(url, ct);
             if (sprite != null && !ct.IsCancellationRequested)
-                programLogo.sprite = sprite;
+                ImageReveal.ShowFadeIn(programLogo, sprite, startFrame);
         }
 
         /// <summary>

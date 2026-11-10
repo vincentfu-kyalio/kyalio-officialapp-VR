@@ -35,7 +35,7 @@ namespace Kyalio.Pages
     ///   — Saves final watch progress.
     ///   — Closes media and restores TabBar.
     /// </summary>
-    public class PlayVideoPage : MonoBehaviour, IPageHandler
+    public class PlayVideoPage : MonoBehaviour, IPageHandler, IRevealGate
     {
         [Header("AVPro")]
         [SerializeField] private MediaPlayer _mediaPlayer;
@@ -106,6 +106,49 @@ namespace Kyalio.Pages
 
         private float _playbackRate = 1f;
         private int _pendingResumeMs;
+
+        // Reveal gate: the fade into this page stays black until the opened media shows
+        // its first frame at the resume position, so the user never sees an empty sphere
+        // and then the video popping in, or frame 0 jumping to the saved position.
+        private bool _firstFrameReady;
+        private bool _awaitingResumeSeek;
+        private float _gateStartedAt;
+
+        // True once CurrentPositionMs holds this video's real position (see Update). Until
+        // then nothing is synced, so backing out early keeps the saved resume point.
+        private bool _positionValid;
+
+        // Fallback if a platform never reports FirstFrameReady / FinishedSeeking: once
+        // playing this long, treat the media as settled so the scrub bar is not frozen.
+        private const float GateFallbackSeconds = 3f;
+
+        /// <inheritdoc/>
+        public bool IsReadyToReveal => _firstFrameReady && !_awaitingResumeSeek;
+
+        // Nothing will play (no media, failed stream, player error): reveal the controls.
+        private void RevealNow()
+        {
+            _firstFrameReady    = true;
+            _awaitingResumeSeek = false;
+        }
+
+        /// <summary>
+        /// Puts the scrub bar and time labels where this video will start (its saved
+        /// position, or 0 when it was nearly finished — same rule as OnMetaDataReady)
+        /// before the media opens, so they never show the previous video's values.
+        /// </summary>
+        private void ShowStartPosition(PlaylistItem item)
+        {
+            double duration = (item?.DurationMs ?? 0) / 1000.0;
+            double start = item != null && !string.IsNullOrEmpty(item.VideoId)
+                ? ProjectCacheRepository.Instance.GetProgressMs(item.VideoId) / 1000.0
+                : 0;
+            if (duration <= 0 || start >= duration * 0.95) start = 0;
+
+            if (_progressSlider != null)
+                _progressSlider.SetValueWithoutNotify(duration > 0 ? (float)(start / duration) : 0f);
+            UpdateTimeText(start, duration);
+        }
         private bool _preventSliderCallback;
 
         // Last values pushed to the controls. The UI is rendered through the
@@ -193,16 +236,30 @@ namespace Kyalio.Pages
             double duration = _mediaPlayer.Info?.GetDuration() ?? 0;
             double current = _mediaPlayer.Control.GetCurrentTime();
 
+            // While the media is still opening it reports the previous video's time,
+            // then 0, then the resume point; keep showing the start position set by
+            // ShowStartPosition until playback has settled there.
+            if (!IsReadyToReveal && _mediaPlayer.Control.IsPlaying() &&
+                Time.unscaledTime - _gateStartedAt > GateFallbackSeconds)
+                RevealNow();
+            bool settled = IsReadyToReveal;
+
             // Scrub bar — guard against re-entrant callbacks
-            if (duration > 0 && !_preventSliderCallback)
+            if (settled && duration > 0 && !_preventSliderCallback)
             {
                 _preventSliderCallback = true;
                 UpdateProgressSlider((float)(current / duration));
                 _preventSliderCallback = false;
             }
 
-            UpdateTimeText(current, duration);
-            AppPlaybackState.Instance.CurrentPositionMs = (long)(current * 1000.0);
+            if (settled)
+            {
+                UpdateTimeText(current, duration);
+                // Only a settled player reports this video's real position; before that it
+                // is the previous video's time or 0, which must never be saved as progress.
+                AppPlaybackState.Instance.CurrentPositionMs = (long)(current * 1000.0);
+                _positionValid = true;
+            }
             RefreshPlayPauseButton();
 
             // Auto-hide the controls after inactivity, but only while actually
@@ -216,7 +273,7 @@ namespace Kyalio.Pages
             }
 
             // Periodic watch-history sync while playing
-            if (_mediaPlayer.Control.IsPlaying() && !DevFlags.UseFakeData)
+            if (_mediaPlayer.Control.IsPlaying() && _positionValid && !DevFlags.UseFakeData)
             {
                 _watchSyncTimer += Time.deltaTime;
                 if (_watchSyncTimer >= WatchSyncIntervalSecs)
@@ -267,7 +324,6 @@ namespace Kyalio.Pages
 
             SetSpeed(1f);
             RefreshNavButtons();
-            UpdateTimeText(0, 0);
             // Keep the user's Loop choice from the toggle; it persists across
             // episodes and media re-opens (AVPro stores it on the MediaPlayer).
             SetLoop(_loopToggle != null && _loopToggle.isOn);
@@ -283,7 +339,7 @@ namespace Kyalio.Pages
 
             // Save final progress with a fresh token — page is closing but the request
             // must be allowed to complete.
-            if (!DevFlags.UseFakeData && _currentItem != null)
+            if (!DevFlags.UseFakeData && _currentItem != null && _positionValid)
                 SyncWatchProgressAsync(CancellationToken.None).Forget();
 
             AppState.Instance.MarkWatchHistoryDirty();
@@ -307,7 +363,16 @@ namespace Kyalio.Pages
         private async UniTaskVoid LoadAndPlayAsync(
             string projectId, PlaylistItem item, CancellationToken ct)
         {
-            if (string.IsNullOrEmpty(item?.VideoId)) return;
+            // Every media open (page entry, auto-advance, Next / Prev) comes through here:
+            // reset the reveal gate and the position guard, and show where this video will
+            // start, before the player reports anything for it.
+            _firstFrameReady    = false;
+            _awaitingResumeSeek = false;
+            _gateStartedAt      = Time.unscaledTime;
+            _positionValid      = false;
+            ShowStartPosition(item);
+
+            if (string.IsNullOrEmpty(item?.VideoId)) { RevealNow(); return; }
 
             int resumeMs = ProjectCacheRepository.Instance.GetProgressMs(item.VideoId);
 
@@ -349,6 +414,7 @@ namespace Kyalio.Pages
             catch (Exception e)
             {
                 Debug.LogError($"[PlayVideoPage] Stream fetch failed: {e.Message}");
+                RevealNow();
             }
         }
 
@@ -371,6 +437,7 @@ namespace Kyalio.Pages
             {
                 Debug.LogWarning(
                     "[PlayVideoPage] No local download and no dev video path; nothing to play.");
+                RevealNow();
                 return;
             }
 
@@ -421,6 +488,18 @@ namespace Kyalio.Pages
                     OnMetaDataReady();
                     break;
 
+                case MediaPlayerEvent.EventType.FirstFrameReady:
+                    _firstFrameReady = true;
+                    break;
+
+                case MediaPlayerEvent.EventType.FinishedSeeking:
+                    _awaitingResumeSeek = false;
+                    break;
+
+                case MediaPlayerEvent.EventType.Error:
+                    RevealNow();
+                    break;
+
                 case MediaPlayerEvent.EventType.FinishedPlaying:
                     OnVideoFinished();
                     break;
@@ -445,8 +524,11 @@ namespace Kyalio.Pages
                 // If duration is known and the saved position is in the last 5%,
                 // treat the episode as completed and play from the beginning.
                 bool isCompleted = duration > 0 && seekSecs >= duration * 0.95;
-                if (!isCompleted)
-                    _mediaPlayer.Control?.Seek(seekSecs);
+                if (!isCompleted && _mediaPlayer.Control != null)
+                {
+                    _awaitingResumeSeek = true;
+                    _mediaPlayer.Control.Seek(seekSecs);
+                }
 
                 _pendingResumeMs = 0;
             }

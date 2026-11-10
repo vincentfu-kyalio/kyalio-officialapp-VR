@@ -88,6 +88,7 @@ namespace Kyalio.Pages
         private void Awake()
         {
             ThumbnailLoader.Track(thumbnailImage);
+            SliderFillClip.Install(overallProgressSlider);
             backButton.onClick.AddListener(() => UIManager.Instance.GoBack());
             favoriteButton.onClick.AddListener(OnFavoriteToggled);
 
@@ -175,34 +176,117 @@ namespace Kyalio.Pages
         }
 
         // ── Load ──────────────────────────────────────────────────────
+        // The page is filled from the local project cache in the same frame it appears
+        // (sync + batch at login already hold full projects with playlists), so it never
+        // shows the previous project while the detail request is in flight. The request
+        // still runs; its result is rebound only when it differs from what is shown.
         private async UniTaskVoid LoadAsync(string projectId, CancellationToken ct)
         {
+            var repo   = ProjectCacheRepository.Instance;
+            var cached = repo.Get(projectId);
+            // Signed playlist thumbnails in the cache may have expired; then the fresh
+            // detail's URLs are needed even when nothing else changed.
+            bool cachedUrlsExpired = IsExpired(repo.ThumbnailsExpireAt);
+
+            if (cached != null)
+            {
+                BindDetail(cached);
+                LoadThumbnailAsync(cached.ThumbnailUrl, ct).Forget();
+            }
+            else
+            {
+                ClearDetail();
+            }
+
             try
             {
                 var detail = await ServiceLocator.Instance.V2.Content
                     .GetProjectAsync(projectId, ct);
-                if (ct.IsCancellationRequested) return;
+                if (ct.IsCancellationRequested || detail == null) return;
 
-                ProjectCacheRepository.Instance.ApplyProjectDetail(detail);
-                BindDetail(detail);
+                repo.ApplyProjectDetail(detail);
 
-                if (thumbnailImage != null && !string.IsNullOrEmpty(detail.ThumbnailUrl))
+                bool unchanged = cached != null && !cachedUrlsExpired &&
+                                 cached.ProjectVersion   == detail.ProjectVersion &&
+                                 cached.ThumbnailVersion == detail.ThumbnailVersion;
+                if (unchanged)
                 {
-                    thumbnailImage.sprite = null;
-                    thumbnailImage.color  = new Color32(43, 43, 43, 255);
-                    var sprite = await ThumbnailLoader.LoadAsync(
-                        ThumbnailLoader.Resolve(detail.ThumbnailUrl), ct);
-                    if (sprite != null && !ct.IsCancellationRequested)
-                    {
-                        thumbnailImage.sprite = sprite;
-                        thumbnailImage.color  = Color.white;
-                    }
+                    // Same content: keep the rows as they are (rebinding would reload
+                    // their thumbnails under freshly signed URLs) but act on fresh data.
+                    _currentDetail = detail;
+                    return;
                 }
+
+                BindDetail(detail);
+                LoadThumbnailAsync(detail.ThumbnailUrl, ct).Forget();
             }
             catch (System.OperationCanceledException) { }
             catch (System.Exception e)
             {
                 Debug.LogError($"[ProjectInfoPage] Load failed: {e.Message}");
+            }
+        }
+
+        // The cover can be requested twice per visit (cached URL, then the fresh detail's);
+        // each request cancels the previous one, so a slow stale download never lands last.
+        private CancellationTokenSource _thumbnailCts;
+
+        private async UniTaskVoid LoadThumbnailAsync(string url, CancellationToken pageCt)
+        {
+            if (thumbnailImage == null) return;
+
+            _thumbnailCts?.Cancel();   // not disposed: the previous load may still read its token
+            _thumbnailCts =CancellationTokenSource.CreateLinkedTokenSource(pageCt);
+            var ct = _thumbnailCts.Token;
+
+            thumbnailImage.sprite = null;
+            thumbnailImage.color  = new Color32(43, 43, 43, 255);
+            ImageReveal.Reset(thumbnailImage);
+            if (string.IsNullOrEmpty(url)) return;
+
+            // A cached sprite comes back synchronously, so the placeholder never shows.
+            int startFrame = Time.frameCount;
+            var sprite = await ThumbnailLoader.LoadAsync(ThumbnailLoader.Resolve(url), ct);
+            if (sprite != null && !ct.IsCancellationRequested)
+                ImageReveal.ShowThumbnail(thumbnailImage, sprite, startFrame);
+        }
+
+        private static bool IsExpired(string isoTime)
+        {
+            if (string.IsNullOrEmpty(isoTime) ||
+                !System.DateTime.TryParse(isoTime, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var expiresAt))
+                return false;
+            // A minute of margin: a URL about to expire would fail mid-download.
+            return System.DateTime.UtcNow >= expiresAt.ToUniversalTime().AddMinutes(-1);
+        }
+
+        // Project not in the cache: show an empty page rather than the previous project.
+        private void ClearDetail()
+        {
+            _currentDetail = null;
+
+            if (titleText != null)       titleText.text       = string.Empty;
+            if (categoryText != null)    categoryText.text    = string.Empty;
+            if (contributorText != null) contributorText.text = string.Empty;
+            if (programText != null)     programText.text     = string.Empty;
+            if (descriptionText != null) descriptionText.text = string.Empty;
+            if (durationText != null)    durationText.text    = string.Empty;
+            if (videoTypeText != null)   videoTypeText.text   = string.Empty;
+            if (sizeText != null)        sizeText.text        = string.Empty;
+
+            RefreshFavoriteButton();
+            RefreshDownloadAllUI();
+            RefreshPlaylistCountText(0);
+            ClearPlaylistRows();
+            if (overallProgressSlider != null) overallProgressSlider.gameObject.SetActive(false);
+
+            _thumbnailCts?.Cancel();   // a cover still loading must not land on the empty page
+            if (thumbnailImage != null)
+            {
+                thumbnailImage.sprite = null;
+                thumbnailImage.color  = new Color32(43, 43, 43, 255);
+                ImageReveal.Reset(thumbnailImage);
             }
         }
 

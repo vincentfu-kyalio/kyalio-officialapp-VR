@@ -34,17 +34,37 @@ namespace Kyalio.Core
                 Debug.LogWarning($"[Session] Server logout failed (continuing): {e.Message}");
             }
 
-            // 2. Drop the bearer, the persisted credential (must happen before returning to
-            //    Login, or LoginPage would auto-resume it) and all in-memory session state.
+            // 2. Drop the bearer and the persisted credential now (before returning to Login,
+            //    or LoginPage would auto-resume it), then go back to Login through the black
+            //    fade. In-memory state is cleared while the screen is dark, so thumbnails do
+            //    not blank out on the still-visible main UI.
             AuthStorage.ClearCredential();
             ServiceLocator.Instance.ApiClient.ClearToken();
+            ReturnToLogin();
+        }
+
+        private static void ClearSessionState()
+        {
             AppState.Reset();          // also resets ProjectCacheRepository (V2)
             UserLocalState.Reset();
             PlaybackState.Reset();
             ThumbnailLoader.ClearCache();
+        }
 
-            // 3. Back to the pairing screen, clearing navigation history.
-            UIManager.Instance?.SwitchPage(PageType.Login);
+        // Back to the pairing screen, clearing navigation history; the tab bar is hidden by
+        // LoginPage.OnEnter.
+        // thenOnLogin runs once Login is up (behind the black when fading).
+        private static void ReturnToLogin(Action thenOnLogin = null)
+        {
+            var ui = UIManager.Instance;
+            if (ui == null)
+            {
+                ClearSessionState();
+                thenOnLogin?.Invoke();
+                return;
+            }
+            ui.SwitchPage(PageType.Login, fade: true, alongside: ClearSessionState,
+                afterSwitch: thenOnLogin);
         }
 
         /// <summary>
@@ -60,14 +80,11 @@ namespace Kyalio.Core
 
             AuthStorage.ClearCredential();
             ServiceLocator.Instance.ApiClient.ClearToken();
-            AppState.Reset();
-            UserLocalState.Reset();
-            PlaybackState.Reset();
-            ThumbnailLoader.ClearCache();
 
-            UIManager.Instance?.SwitchPage(PageType.Login);
-
-            PopupManager.Instance?.ShowDone("Your session has expired. Please sign in again.");
+            // The popup opens while the screen is black, together with Login, so it fades in
+            // over a stable Login screen.
+            ReturnToLogin(() =>
+                PopupManager.Instance?.ShowDone("Your session has expired. Please sign in again."));
         }
     }
 }
