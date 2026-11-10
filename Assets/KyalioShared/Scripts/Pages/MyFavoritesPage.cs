@@ -127,10 +127,9 @@ namespace Kyalio.Pages
             catch (Exception e) { Debug.LogError($"[MyFavoritesPage] Load failed: {e.Message}"); }
         }
 
+        // The current list stays up while favorites load; the bind then reuses its items.
         private async UniTask LoadListAsync(CancellationToken ct)
         {
-            ClearList();
-
             if (_mode == ListMode.Favorites)
                 await LoadFavoritesAsync(ct);
             else
@@ -151,7 +150,7 @@ namespace Kyalio.Pages
 
         private void BindFavoriteItems(List<FavoriteItem> items)
         {
-            ClearList();
+            BeginList();
             var repo = ProjectCacheRepository.Instance;
             int count = 0;
             foreach (var fav in items ?? new List<FavoriteItem>())
@@ -168,6 +167,7 @@ namespace Kyalio.Pages
                     true);
                 count++;
             }
+            EndList();
             if (projectCountText != null)
                 projectCountText.text = $"{count} project{(count == 1 ? "" : "s")}";
         }
@@ -194,6 +194,7 @@ namespace Kyalio.Pages
             var seen = new HashSet<string>();
             var sorted = records.OrderByDescending(r => r.DownloadedAt);
 
+            BeginList();
             foreach (var record in sorted)
             {
                 if (!seen.Add(record.ProjectId)) continue;
@@ -209,12 +210,23 @@ namespace Kyalio.Pages
                     FormatBytes(projectBytes), p.ThumbnailUrl, repo.GetFirstProgram(p)?.PicUrl,
                     p.PlaylistCount, false);
             }
+            EndList();
         }
+
+        // A list rebuild is BeginList → SpawnItem × n → EndList. Items already showing are
+        // rebound in place (CardPool.GetOrReuse); EndList returns the leftovers.
+        private void BeginList()
+        {
+            _items.Clear();
+            _selectedIds.Clear();
+        }
+
+        private void EndList() => ItemPool.TrimTo(_items.Count);
 
         private void SpawnItem(string projectId, string title, string category,
             string drName, string thumbnailUrl, string programPicUrl, int videoCount, bool prefixWithDr)
         {
-            var item = ItemPool.Get();
+            var item = ItemPool.GetOrReuse(_items.Count);
             item.OnSelectionChanged = OnItemSelectionChanged;
             item.OnItemClicked = pid => UIManager.Instance.GoTo(PageType.ProjectInfo,
                 new Kyalio.Models.ProjectNavParam { ProjectId = pid, Source = ProjectPageSource.Favorites });
@@ -228,13 +240,6 @@ namespace Kyalio.Pages
             if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824.0:F1} GB";
             if (bytes >= 1_048_576)     return $"{bytes / 1_048_576.0:F0} MB";
             return bytes > 0 ? $"{bytes / 1024.0:F0} KB" : "0 KB";
-        }
-
-        private void ClearList()
-        {
-            ItemPool.ReturnAll();
-            _items.Clear();
-            _selectedIds.Clear();
         }
 
         // ── Edit mode ─────────────────────────────────────────────────

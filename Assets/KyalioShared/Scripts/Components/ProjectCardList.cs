@@ -29,14 +29,14 @@ namespace Kyalio.Components
         /// </summary>
         public void Show(IReadOnlyList<Project> projects, bool keepScroll = false)
         {
-            Pool.ReturnAll();
-
-            foreach (var project in projects)
+            int count = projects?.Count ?? 0;
+            for (int i = 0; i < count; i++)
             {
-                var card = Pool.Get();
+                var card = Pool.GetOrReuse(i);
                 card.OnClicked = p => OnProjectClicked?.Invoke(p);
-                card.Bind(project);
+                card.Bind(projects[i]);
             }
+            Pool.TrimTo(count);
 
             RefreshLayout(keepScroll);
         }

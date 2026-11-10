@@ -53,10 +53,9 @@ namespace Kyalio.Pages
             ShowSelection(selection, keepScroll: selection.SameAs(previous));
         }
 
-        public void OnExit()
-        {
-            projectList.Clear();
-        }
+        // Cards stay bound while the page is hidden: the next OnEnter rebinds them in place
+        // (ProjectCardList.Show), so clearing here would only force them all to rebuild.
+        public void OnExit() { }
 
         [ContextMenu("Load Fake Data")]
         public void LoadFakeData() => OnEnter(null);
@@ -67,8 +66,6 @@ namespace Kyalio.Pages
 
         private void ShowSelection(HomeMenuSelection selection, bool keepScroll = false)
         {
-            projectList.Clear();
-
             var repo = ProjectCacheRepository.Instance;
             var home = AppState.Instance.LastHome;
 

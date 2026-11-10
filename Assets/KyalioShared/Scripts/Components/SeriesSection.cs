@@ -35,19 +35,21 @@ namespace Kyalio.Components
         /// <summary>
         /// Projects mode — shows a ProjectCard per project and scrolls to the top.
         /// Pass keepScroll when re-showing the same role (e.g. returning to the page):
-        /// Clear() leaves the content position untouched, so the user lands where they left.
+        /// the content position is left untouched, so the user lands where they left.
+        /// Cards already showing are rebound in place (CardPool.GetOrReuse).
         /// </summary>
         public void Bind(IReadOnlyList<Project> projects, bool keepScroll = false)
         {
-            Clear();
+            EpisodePool.ReturnAll();
 
-            if (projects == null) return;
-            foreach (var p in projects)
+            int count = projects?.Count ?? 0;
+            for (int i = 0; i < count; i++)
             {
-                var card = ProjectPool.Get();
+                var card = ProjectPool.GetOrReuse(i);
                 card.OnClicked = proj => OnProjectClicked?.Invoke(proj);
-                card.Bind(p);
+                card.Bind(projects[i]);
             }
+            ProjectPool.TrimTo(count);
 
             RefreshLayout(keepScroll);
         }
@@ -56,16 +58,20 @@ namespace Kyalio.Components
         public void BindEpisodes(IReadOnlyList<(string projectId, PlaylistItem item, int progressMs)> episodes,
             bool keepScroll = false)
         {
-            Clear();
+            ProjectPool.ReturnAll();
 
-            if (episodes == null) return;
-            foreach (var ep in episodes)
+            int count = 0;
+            if (episodes != null)
             {
-                if (ep.item == null) continue;
-                var card = EpisodePool.Get();
-                card.OnClicked = (pid, item) => OnEpisodeClicked?.Invoke(pid, item);
-                card.Bind(ep.projectId, ep.item, ep.progressMs);
+                foreach (var ep in episodes)
+                {
+                    if (ep.item == null) continue;
+                    var card = EpisodePool.GetOrReuse(count++);
+                    card.OnClicked = (pid, item) => OnEpisodeClicked?.Invoke(pid, item);
+                    card.Bind(ep.projectId, ep.item, ep.progressMs);
+                }
             }
+            EpisodePool.TrimTo(count);
 
             RefreshLayout(keepScroll);
         }

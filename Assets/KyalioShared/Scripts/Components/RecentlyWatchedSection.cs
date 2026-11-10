@@ -32,14 +32,15 @@ namespace Kyalio.Components
         public void Bind(string title, IReadOnlyList<WatchHistoryItem> items)
         {
             titleText.text = title;
-            Pool.ReturnAll();
 
-            foreach (var item in items)
+            // Rebind the cards already showing in place (CardPool.GetOrReuse).
+            for (int i = 0; i < items.Count; i++)
             {
-                var card = Pool.Get();
+                var card = Pool.GetOrReuse(i);
                 card.OnClicked = (projectId, _) => OnProjectClicked?.Invoke(projectId);
-                card.Bind(item);
+                card.Bind(items[i]);
             }
+            Pool.TrimTo(items.Count);
 
             if (seeAllButton != null)
                 seeAllButton.gameObject.SetActive(items.Count > 0);

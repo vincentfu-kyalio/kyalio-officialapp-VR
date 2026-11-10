@@ -42,8 +42,7 @@ namespace Kyalio.Pages
 
             _displayMode = roles?.DisplayMode ?? HomeRolesDisplayMode.Projects;
 
-            rightSection?.Clear();
-            if (rolePanel == null) return;
+            if (rolePanel == null) { rightSection?.Clear(); return; }
 
             // Return to the role and scroll position picked last (e.g. coming back from
             // Project Info); the first role at the top on first entry or when that role is gone.
@@ -51,8 +50,11 @@ namespace Kyalio.Pages
             // Pass the list itself (not a fresh fallback) so Build can skip unchanged roles.
             rolePanel.Build(roles?.Items);
             var role = rolePanel.Restore(previous);
+            // Cards left from the last visit are rebound in place by ShowRole, not cleared.
             if (role != null)
                 ShowRole(role, keepScroll: role.Name == previous);
+            else
+                rightSection?.Clear();
         }
 
         public void OnExit() { }
@@ -69,7 +71,6 @@ namespace Kyalio.Pages
             if (rightPanelTitle != null)
                 rightPanelTitle.text = role.Name;
 
-            rightSection.Clear();
             var repo = ProjectCacheRepository.Instance;
 
             if (_displayMode == HomeRolesDisplayMode.Episodes)
