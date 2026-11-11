@@ -34,7 +34,14 @@ namespace Kyalio.State.V2
 
         public void SetAccount(MeResponse account) => Account = account;
 
-        public void SetLoggedIn() => IsLoggedIn = true;
+        /// <summary>Fires each time a session is established (the bearer token is set).</summary>
+        public static event System.Action OnLoggedIn;
+
+        public void SetLoggedIn()
+        {
+            IsLoggedIn = true;
+            OnLoggedIn?.Invoke();
+        }
 
         /// <summary>
         /// Stores a fetched list. <paramref name="fetchedAtVersion"/> is the

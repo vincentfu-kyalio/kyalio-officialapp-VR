@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks;
 using Kyalio.Core;
 using Kyalio.Models;
 using Kyalio.State;
+using Kyalio.State.V2;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -49,6 +50,22 @@ namespace Kyalio.Services
         public void Initialize(string baseUrl)
         {
             _baseUrl = baseUrl.TrimEnd('/');
+            DownloadedVideoState.Instance.MigrateLegacyStorage();
+        }
+
+        private void OnEnable()  => AppState.OnLoggedIn += FlushPendingServerDeletes;
+        private void OnDisable() => AppState.OnLoggedIn -= FlushPendingServerDeletes;
+
+        /// <summary>
+        /// Tells the server about local files discarded while signed out (legacy upgrade).
+        /// Best effort: each DELETE is sent once and a failure is not retried.
+        /// </summary>
+        private static void FlushPendingServerDeletes()
+        {
+            var download = ServiceLocator.Instance?.V2?.Download;
+            if (download == null) return;
+            foreach (var p in DownloadedVideoState.Instance.TakePendingServerDeletes())
+                download.DeleteAsync(p.ProjectId, p.VideoId).Forget();
         }
 
         private void OnApplicationPause(bool paused)
@@ -149,10 +166,27 @@ namespace Kyalio.Services
             _downloadCts = new CancellationTokenSource();
             var ct = _downloadCts.Token;
 
-            var destPath = GetDownloadPath(task.ProjectId, task.VideoId);
-            EnsureDownloadDir();
+            var destPath = DownloadStorage.GetFilePath(task.ProjectId, task.VideoId);
+            int headerSize = DownloadStorage.HeaderSize;
 
-            long existingBytes = File.Exists(destPath) ? new FileInfo(destPath).Length : 0;
+            try
+            {
+                DownloadStorage.EnsureRoot();
+                // A file shorter than the header was cut off while being created: start over.
+                if (!File.Exists(destPath) || new FileInfo(destPath).Length < headerSize)
+                    DownloadStorage.WriteHeader(destPath);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[DownloadManager] Prepare file failed: {e.Message}");
+                OnFailed?.Invoke(task.ProjectId, task.VideoId, e.Message);
+                _downloadCts?.Dispose();
+                _downloadCts = null;
+                return;
+            }
+
+            // Media bytes already on disk after the header; the Range offset is in media bytes.
+            long existingBytes = new FileInfo(destPath).Length - headerSize;
             bool useRange = existingBytes > 0;
 
             var download = ServiceLocator.Instance?.V2?.Download;
@@ -182,7 +216,8 @@ namespace Kyalio.Services
                 req = new UnityWebRequest(urlResp.DownloadUrl, UnityWebRequest.kHttpVerbGET);
                 if (useRange)
                     req.SetRequestHeader("Range", $"bytes={existingBytes}-");
-                req.downloadHandler = new DownloadHandlerFile(destPath, useRange);
+                // Always append: the file already holds the header (and any resumed bytes).
+                req.downloadHandler = new DownloadHandlerFile(destPath, append: true);
 
                 var op = req.SendWebRequest();
 
@@ -222,7 +257,7 @@ namespace Kyalio.Services
                 {
                     ProjectId = task.ProjectId,
                     VideoId = task.VideoId,
-                    FilePath = destPath,
+                    FileName = Path.GetFileName(destPath),
                     DownloadedAt = DateTime.UtcNow,
                     SizeBytes = task.TotalBytes
                 });
@@ -260,16 +295,6 @@ namespace Kyalio.Services
                 ?.MarkCanceledAsync(task.ProjectId, task.VideoId).Forget();
 
         // ── Helpers ───────────────────────────────────────────────────
-        public static string GetDownloadPath(string projectId, string videoId) =>
-            Path.Combine(Application.persistentDataPath, "downloads", $"{projectId}_{videoId}.mp4");
-
-        private static void EnsureDownloadDir()
-        {
-            var dir = Path.Combine(Application.persistentDataPath, "downloads");
-            if (!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-        }
-
         private static void TryDeleteFile(string path)
         {
             try { if (File.Exists(path)) File.Delete(path); }

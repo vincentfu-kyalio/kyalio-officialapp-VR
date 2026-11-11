@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Kyalio.Models;
+using Kyalio.Services;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -10,7 +11,8 @@ namespace Kyalio.State
 {
     /// <summary>
     /// Local state for downloaded videos.
-    /// Stored at Application.persistentDataPath/downloadedVideos.json.
+    /// Stored at Application.persistentDataPath/downloadedVideos.json; the video files
+    /// themselves live in DownloadStorage.Root.
     /// Follows the same pattern as UserLocalState; retained after logout.
     /// </summary>
     public class DownloadedVideoState
@@ -22,6 +24,12 @@ namespace Kyalio.State
             Path.Combine(Application.persistentDataPath, "downloadedVideos.json");
 
         public List<DownloadRecord> Records = new();
+
+        /// <summary>
+        /// Server DELETE /download calls owed for local files discarded while signed out
+        /// (the legacy upgrade runs at launch, before login). Sent once after the next login.
+        /// </summary>
+        public List<PendingServerDelete> PendingServerDeletes = new();
 
         /// <summary>
         /// Fires whenever a record is added or removed; UI components (e.g. PlaylistItemRow) subscribe to refresh their state.
@@ -119,6 +127,62 @@ namespace Kyalio.State
             Save();
             OnRecordsChanged?.Invoke();
             return true;
+        }
+
+        /// <summary>
+        /// Discards downloads made before private storage: their records (queued for a server
+        /// DELETE after login) and the whole legacy folder, partial files included. Users
+        /// re-download into the new location. Safe to call every launch; a no-op once done.
+        /// </summary>
+        public void MigrateLegacyStorage()
+        {
+            var legacy = Records.FindAll(r => r.IsLegacy);
+            if (legacy.Count > 0)
+            {
+                foreach (var rec in legacy)
+                {
+                    TryDelete(rec.LegacyFilePath);
+                    PendingServerDeletes.Add(new PendingServerDelete
+                    {
+                        ProjectId = rec.ProjectId,
+                        VideoId = rec.VideoId
+                    });
+                }
+                Records.RemoveAll(r => r.IsLegacy);
+                Save();
+                Debug.Log($"[DownloadedVideoState] Discarded {legacy.Count} legacy download(s).");
+                OnRecordsChanged?.Invoke();
+            }
+
+            // Partial files have no record (and the server already saw them canceled), so the
+            // folder is removed wholesale rather than file by file.
+            try
+            {
+                var legacyRoot = DownloadStorage.LegacyRoot;
+                if (Directory.Exists(legacyRoot))
+                    Directory.Delete(legacyRoot, recursive: true);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[DownloadedVideoState] Delete legacy folder failed: {e.Message}");
+            }
+        }
+
+        /// <summary>Returns and clears the owed server deletes (best effort: not retried).</summary>
+        public List<PendingServerDelete> TakePendingServerDeletes()
+        {
+            if (PendingServerDeletes.Count == 0) return new List<PendingServerDelete>();
+            var taken = PendingServerDeletes;
+            PendingServerDeletes = new List<PendingServerDelete>();
+            Save();
+            return taken;
+        }
+
+        private static void TryDelete(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch (Exception e) { Debug.LogError($"[DownloadedVideoState] Delete file failed: {e.Message}"); }
         }
 
         public void Save()
