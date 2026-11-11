@@ -86,7 +86,9 @@ namespace Kyalio.Pages
             if (_keyboard == null) _keyboard = FindFirstObjectByType<VirtualKeyboard>();
             // Only an active keyboard polls focus; registering with an inactive one would
             // also turn the system keyboard off, leaving the fields with no keyboard at all.
-            if (_keyboard != null && _keyboard.isActiveAndEnabled)
+            // Not isActiveAndEnabled: that stays false until the keyboard's OnEnable has run,
+            // and this Awake may run before it.
+            if (_keyboard != null && _keyboard.enabled && _keyboard.gameObject.activeInHierarchy)
             {
                 _keyboard.Register(_emailInput, KeyboardLayoutKind.Email);
                 _keyboard.Register(_passwordInput, KeyboardLayoutKind.Text);

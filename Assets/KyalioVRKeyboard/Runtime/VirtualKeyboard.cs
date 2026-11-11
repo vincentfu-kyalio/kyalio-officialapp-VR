@@ -97,7 +97,6 @@ namespace Kyalio.VRKeyboard
         private TMP_InputField _target;
         private Registration _registration;
         private Dictionary<string, KeyboardPage> _pages;
-        private KeyboardPage _page;
         private int _lostFocusFrames;
 
         private bool _shift, _capsLock;
@@ -225,20 +224,35 @@ namespace Kyalio.VRKeyboard
                 Detach();
             }
 
-            if (_repeatKey != null && Time.unscaledTime >= _nextRepeatTime)
+            // Only into the field that still has focus (not during the grace frame above).
+            if (_repeatKey != null && _target != null && _target.isFocused &&
+                Time.unscaledTime >= _nextRepeatTime)
             {
-                _nextRepeatTime += repeatInterval;
+                // From now, not from the last due time: after a frame stall, catching up
+                // would delete a burst of characters on consecutive frames.
+                _nextRepeatTime = Time.unscaledTime + repeatInterval;
                 Backspace();
                 KeyPressed?.Invoke();   // each repeat, like the first press
             }
         }
 
+        private readonly List<TMP_InputField> _destroyedFields = new();
+
         private TMP_InputField FindFocusedField()
         {
+            TMP_InputField focused = null;
             foreach (var field in _fields.Keys)
-                if (field != null && field.isActiveAndEnabled && field.isFocused)
-                    return field;
-            return null;
+            {
+                if (field == null) _destroyedFields.Add(field);   // destroyed without Unregister
+                else if (focused == null && field.isActiveAndEnabled && field.isFocused) focused = field;
+            }
+
+            if (_destroyedFields.Count > 0)
+            {
+                foreach (var field in _destroyedFields) _fields.Remove(field);
+                _destroyedFields.Clear();
+            }
+            return focused;
         }
 
         // ── Show / hide ───────────────────────────────────────────────
@@ -325,7 +339,6 @@ namespace Kyalio.VRKeyboard
         private void ShowPage(string name)
         {
             if (_pages == null || !_pages.TryGetValue(name, out var page)) return;
-            _page = page;
             _repeatKey = null;
 
             var area = keyArea.rect;
@@ -487,12 +500,16 @@ namespace Kyalio.VRKeyboard
             var e = KeyEvent;
             e.keyCode = KeyCode.None;
             e.modifiers = EventModifiers.None;
+            var field = _target;
             foreach (char c in text)
             {
+                // An onValueChanged listener may close the keyboard mid-string (".com").
+                if (field == null || field != _target) return;
                 e.character = c;
-                _target.ProcessEvent(e);
-                RefreshTarget();
+                field.ProcessEvent(e);
             }
+            // Once per string: inserting doesn't read the mesh's character positions.
+            if (field != null && field == _target) RefreshTarget();
         }
 
         private void Backspace()
