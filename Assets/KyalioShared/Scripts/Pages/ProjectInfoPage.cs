@@ -98,6 +98,11 @@ namespace Kyalio.Pages
                 downloadAllButton.onClick.AddListener(() => OnDownloadAllClickAsync().Forget());
         }
 
+        // The progress event is static: a page torn down without OnExit (scene unload, quit)
+        // must not leave a handler that touches destroyed UI from the repository's writes.
+        private void OnDestroy() =>
+            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
+
         public void OnEnter(object param)
         {
             SubscribeDownloadEvents();
@@ -128,6 +133,10 @@ namespace Kyalio.Pages
                 return; // Returning via GoBack with no prior context — nothing to show
             }
 
+            // Subscribed only once there is a project to show (OnExit / OnDestroy unsubscribe).
+            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
+            ProjectCacheRepository.OnProgressChanged += OnWatchProgressChanged;
+
             if (DevFlags.UseFakeData)
             {
                 LoadFakeData();
@@ -142,6 +151,7 @@ namespace Kyalio.Pages
         public void OnExit()
         {
             UnsubscribeDownloadEvents();
+            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
 
             _cts?.Cancel();
             _cts?.Dispose();
@@ -656,6 +666,20 @@ namespace Kyalio.Pages
         }
 
         // ── Overall Progress ──────────────────────────────────────────
+        // The progress cache changes after the page is shown: the player's final PATCH and
+        // any progress sync land while this page is up. Redraw only the progress bars;
+        // rebinding the rows would reload their thumbnails.
+        private void OnWatchProgressChanged(string videoId)
+        {
+            var playlist = _currentDetail?.Playlist;
+            if (playlist == null) return;
+            if (videoId != null && !playlist.Exists(i => i.VideoId == videoId)) return;
+
+            RefreshOverallProgress(playlist);
+            foreach (var row in RowPool.Active)
+                row.RefreshWatchProgress();
+        }
+
         private void RefreshOverallProgress(List<PlaylistItem> playlist)
         {
             if (overallProgressSlider == null) return;
