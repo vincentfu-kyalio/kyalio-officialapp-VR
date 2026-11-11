@@ -718,11 +718,19 @@ namespace Kyalio.Pages
         private async UniTaskVoid SyncWatchProgressAsync(CancellationToken ct)
         {
             if (string.IsNullOrEmpty(_projectId) || _currentItem == null) return;
+
+            int progressMs = (int)AppPlaybackState.Instance.CurrentPositionMs;
+
+            // Cache the position now: the page shown on leaving the player renders before
+            // the PATCH below returns and would otherwise show the previous progress.
+            ProjectCacheRepository.Instance.SetLocalProgress(
+                _projectId, _currentItem.VideoId, progressMs);
+
             if (Session.ExpiryDeferred) return;   // token expired: the server would reject it
 
             var request = new UpdateWatchProgressRequest
             {
-                ProgressMs = (int)AppPlaybackState.Instance.CurrentPositionMs,
+                ProgressMs = progressMs,
                 ProjectId = _projectId,
                 KnownProgressUpdatedAt = _knownProgressUpdatedAt,
             };

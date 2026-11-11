@@ -101,6 +101,8 @@ namespace Kyalio.Pages
         public void OnEnter(object param)
         {
             SubscribeDownloadEvents();
+            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
+            ProjectCacheRepository.OnProgressChanged += OnWatchProgressChanged;
 
             // Parse param first — both real and fake modes need the projectId.
             string incomingId = null;
@@ -142,6 +144,7 @@ namespace Kyalio.Pages
         public void OnExit()
         {
             UnsubscribeDownloadEvents();
+            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
 
             _cts?.Cancel();
             _cts?.Dispose();
@@ -656,6 +659,20 @@ namespace Kyalio.Pages
         }
 
         // ── Overall Progress ──────────────────────────────────────────
+        // The progress cache changes after the page is shown: the player's final PATCH and
+        // any progress sync land while this page is up. Redraw only the progress bars;
+        // rebinding the rows would reload their thumbnails.
+        private void OnWatchProgressChanged(string videoId)
+        {
+            var playlist = _currentDetail?.Playlist;
+            if (playlist == null) return;
+            if (videoId != null && !playlist.Exists(i => i.VideoId == videoId)) return;
+
+            RefreshOverallProgress(playlist);
+            foreach (var row in RowPool.Active)
+                row.RefreshWatchProgress();
+        }
+
         private void RefreshOverallProgress(List<PlaylistItem> playlist)
         {
             if (overallProgressSlider == null) return;

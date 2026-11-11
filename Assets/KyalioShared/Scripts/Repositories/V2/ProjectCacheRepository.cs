@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Kyalio.Models.V2;
@@ -101,6 +102,12 @@ namespace Kyalio.Repositories.V2
                 ThumbnailsExpireAt = response.ThumbnailsExpireAt;
         }
 
+        /// <summary>
+        /// Fires when cached watch progress changes; the argument is the videoId, or null when
+        /// many may have changed at once. Static so subscribers survive <see cref="Reset"/>.
+        /// </summary>
+        public static event Action<string> OnProgressChanged;
+
         public void ApplyProgress(ProgressResponse response, bool merge)
         {
             if (response?.Items == null) return;
@@ -109,12 +116,38 @@ namespace Kyalio.Repositories.V2
                 if (!string.IsNullOrEmpty(item?.VideoId))
                     _progressByVideoId[item.VideoId] = item;
             ProgressTimestamp = response.Timestamp;
+            OnProgressChanged?.Invoke(null);
         }
 
         public void UpsertProgress(ProgressItem item)
         {
-            if (!string.IsNullOrEmpty(item?.VideoId))
-                _progressByVideoId[item.VideoId] = item;
+            if (string.IsNullOrEmpty(item?.VideoId)) return;
+            _progressByVideoId[item.VideoId] = item;
+            OnProgressChanged?.Invoke(item.VideoId);
+        }
+
+        /// <summary>
+        /// Records the player's position locally before the server confirms it, so pages shown
+        /// right after the player (while the PATCH is still in flight) see it. The server
+        /// timestamp is kept: it is the conflict token for the next PATCH, and only the
+        /// server's reply (<see cref="UpsertProgress"/>) may advance it.
+        /// </summary>
+        public void SetLocalProgress(string projectId, string videoId, int progressMs)
+        {
+            if (string.IsNullOrEmpty(videoId)) return;
+            _progressByVideoId.TryGetValue(videoId, out var current);
+            if (current != null && current.ProgressMs == progressMs) return;
+
+            // A new object: the cached one may be shared with server response lists.
+            _progressByVideoId[videoId] = new ProgressItem
+            {
+                ProjectId         = current?.ProjectId ?? projectId,
+                VideoId           = videoId,
+                ProgressMs        = progressMs,
+                ProgressUpdatedAt = current?.ProgressUpdatedAt,
+                LastDeviceType    = current?.LastDeviceType,
+            };
+            OnProgressChanged?.Invoke(videoId);
         }
 
         // ── Lookups ──────────────────────────────────────────────────
