@@ -226,7 +226,12 @@ namespace Kyalio.Pages
             catch (Exception e)
             {
                 SetBusy(false);
-                ShowApiError(e);
+                // A remembered password the server rejects (e.g. changed on another device)
+                // must not stay remembered.
+                var code = GetErrorCode(e);
+                if (code == "AUTH_INVALID_CREDENTIALS")
+                    AuthStorage.ForgetPasswordIfRemembered(email, password);
+                ShowApiError(e, code);
             }
         }
 
@@ -550,16 +555,21 @@ namespace Kyalio.Pages
             return string.IsNullOrEmpty(parts) ? "" : $" ({parts})";
         }
 
-        private void ShowApiError(Exception e)
+        private static string GetErrorCode(Exception e)
+        {
+            if (e is not ApiException api) return null;
+            try { return JsonConvert.DeserializeObject<ErrorResponse>(api.Message)?.Error?.Code; }
+            catch { return null; /* non-JSON body */ }
+        }
+
+        private void ShowApiError(Exception e) => ShowApiError(e, GetErrorCode(e));
+
+        private void ShowApiError(Exception e, string code)
         {
             if (e is ApiException api)
             {
                 // 426 → ApiClient already raised the force-update overlay.
                 if (api.StatusCode == 426) return;
-
-                string code = null;
-                try { code = JsonConvert.DeserializeObject<ErrorResponse>(api.Message)?.Error?.Code; }
-                catch { /* non-JSON body */ }
 
                 Debug.LogWarning($"[LoginPage] Auth error {api.StatusCode} {code}");
                 ShowError(code switch
