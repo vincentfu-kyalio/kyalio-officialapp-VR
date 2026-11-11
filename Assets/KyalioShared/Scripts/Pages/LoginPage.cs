@@ -226,10 +226,11 @@ namespace Kyalio.Pages
             catch (Exception e)
             {
                 SetBusy(false);
-                // A rejected password (e.g. changed on another device) must not stay remembered.
+                // A remembered password the server rejects (e.g. changed on another device)
+                // must not stay remembered.
                 var code = GetErrorCode(e);
                 if (code == "AUTH_INVALID_CREDENTIALS")
-                    AuthStorage.ForgetPassword();
+                    AuthStorage.ForgetPasswordIfRemembered(email, password);
                 ShowApiError(e, code);
             }
         }

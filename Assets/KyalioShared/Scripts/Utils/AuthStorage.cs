@@ -135,6 +135,21 @@ namespace Kyalio.Utils
             PlayerPrefs.Save();
         }
 
+        /// <summary>
+        /// Drops the remembered password only if it is exactly the credential the server
+        /// just rejected — a typo or a different account must not wipe a still-valid one.
+        /// </summary>
+        public static void ForgetPasswordIfRemembered(string email, string password)
+        {
+            var stored = PlayerPrefs.GetString(PasswordKey, "");
+            if (string.IsNullOrEmpty(stored)) return;
+            if (!string.Equals(PlayerPrefs.GetString(EmailKey, ""), email, StringComparison.OrdinalIgnoreCase)) return;
+
+            if (SecureStore.Unprotect(stored, out var remembered) == SecureStore.UnprotectResult.Success
+                && remembered == password)
+                ForgetPassword();
+        }
+
         /// <summary>Re-saves a plaintext password left by an older build in encrypted form.</summary>
         private static void MigrateLegacyPassword()
         {
