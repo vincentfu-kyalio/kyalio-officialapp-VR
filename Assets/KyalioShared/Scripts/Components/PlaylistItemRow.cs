@@ -103,14 +103,7 @@ namespace Kyalio.Components
                     sizeText.text = FormatSize(item.SizeBytes);
             }
 
-            if (watchProgressSlider != null)
-            {
-                int progressMs = ProjectCacheRepository.Instance.GetProgressMs(item.VideoId);
-                bool hasProgress = progressMs > 0 && item.DurationMs > 0;
-                watchProgressSlider.gameObject.SetActive(hasProgress);
-                if (hasProgress)
-                    watchProgressSlider.value = Mathf.Clamp01((float)progressMs / item.DurationMs);
-            }
+            RefreshWatchProgress();
 
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
@@ -123,6 +116,17 @@ namespace Kyalio.Components
             // Subscribe events during Bind to ensure _item / _projectId are already set
             SubscribeDownloadEvents();
             RefreshDownloadUI();
+        }
+
+        /// <summary>Redraws the watch-progress bar from the cached progress of the bound video.</summary>
+        public void RefreshWatchProgress()
+        {
+            if (watchProgressSlider == null || _item == null) return;
+            int progressMs = ProjectCacheRepository.Instance.GetProgressMs(_item.VideoId);
+            bool hasProgress = progressMs > 0 && _item.DurationMs > 0;
+            watchProgressSlider.gameObject.SetActive(hasProgress);
+            if (hasProgress)
+                watchProgressSlider.value = Mathf.Clamp01((float)progressMs / _item.DurationMs);
         }
 
         // ── Event Subscription Management ────────────────────────────
