@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kyalio.Components;
@@ -158,7 +159,6 @@ namespace Kyalio.Pages
         private int _shownDurationSecond = -1;
 
         private float _watchSyncTimer;
-        private string _knownProgressUpdatedAt;
 
         // Trigger press summons the controls; idle timer hides them again.
         private float _controlsIdleTimer;
@@ -318,7 +318,6 @@ namespace Kyalio.Pages
             CinemaModeController.Instance?.Enter(fade: false);
 
             _watchSyncTimer = 0f;
-            _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
 
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
@@ -586,7 +585,6 @@ namespace Kyalio.Pages
 
             state.AdvancePlaylist();
             _currentItem = state.Playlist[state.PlaylistIndex];
-            _knownProgressUpdatedAt = ProgressUpdatedAt(_currentItem);
             RefreshNavButtons();
 
             if (_cts == null || _cts.IsCancellationRequested)
@@ -662,7 +660,6 @@ namespace Kyalio.Pages
         {
             _expiryChecker.Stop();
             _currentItem = item;
-            _knownProgressUpdatedAt = ProgressUpdatedAt(item);
             RefreshNavButtons();
 
             _cts?.Cancel();
@@ -715,44 +712,74 @@ namespace Kyalio.Pages
 
         // ── Watch history ─────────────────────────────────────────────
 
+        // PATCHes are sent one at a time, in order (each waits on the previous one's task).
+        // Each carries the conflict token the previous reply stored, so an exit PATCH sent
+        // while a periodic one is in flight no longer gets a 409, and replies cannot land
+        // out of order.
+        private UniTask _syncTail = UniTask.CompletedTask;
+        private int _syncSeq;
+        private readonly Dictionary<string, int> _latestSyncSeqByVideo = new();
+
         private async UniTaskVoid SyncWatchProgressAsync(CancellationToken ct)
         {
             if (string.IsNullOrEmpty(_projectId) || _currentItem == null) return;
+            // Before the player settles, CurrentPositionMs is the previous video's time or 0
+            // (Next / Prev / auto-advance can call this then): never record it as progress.
+            if (!_positionValid) return;
 
-            int progressMs = (int)AppPlaybackState.Instance.CurrentPositionMs;
+            // Captured now: _currentItem changes on Next / Prev while the PATCH is in flight.
+            string projectId  = _projectId;
+            string videoId    = _currentItem.VideoId;
+            int    progressMs = (int)AppPlaybackState.Instance.CurrentPositionMs;
+            var    repo       = ProjectCacheRepository.Instance;
 
             // Cache the position now: the page shown on leaving the player renders before
             // the PATCH below returns and would otherwise show the previous progress.
-            ProjectCacheRepository.Instance.SetLocalProgress(
-                _projectId, _currentItem.VideoId, progressMs);
+            repo.SetLocalProgress(projectId, videoId, progressMs);
 
             if (Session.ExpiryDeferred) return;   // token expired: the server would reject it
 
-            var request = new UpdateWatchProgressRequest
-            {
-                ProgressMs = progressMs,
-                ProjectId = _projectId,
-                KnownProgressUpdatedAt = _knownProgressUpdatedAt,
-            };
+            int seq = ++_syncSeq;
+            _latestSyncSeqByVideo[videoId] = seq;
+
+            var previous = _syncTail;
+            var done = new UniTaskCompletionSource();
+            _syncTail = done.Task;
 
             try
             {
-                var (record, _) = await ServiceLocator.Instance.V2.WatchHistory
-                    .UpdateProgressAsync(_currentItem.VideoId, request, ct);
-                if (record != null)
+                try { await previous; } catch { /* each sync handles its own errors */ }
+
+                var request = new UpdateWatchProgressRequest
                 {
-                    _knownProgressUpdatedAt = record.ProgressUpdatedAt;
-                    ProjectCacheRepository.Instance.UpsertProgress(record);
-                }
+                    ProgressMs = progressMs,
+                    ProjectId = projectId,
+                    // Read at send time: the previous reply may just have advanced it.
+                    KnownProgressUpdatedAt = repo.GetProgressUpdatedAt(videoId),
+                };
+
+                var (record, _) = await ServiceLocator.Instance.V2.WatchHistory
+                    .UpdateProgressAsync(videoId, request, ct);
+                if (record == null) return;
+
+                // A newer sync of this video is queued: keep its (newer) local position on
+                // screen and only take the server's token, which that sync will send.
+                bool superseded = _latestSyncSeqByVideo.TryGetValue(videoId, out var latest) &&
+                                  latest != seq;
+                if (superseded)
+                    repo.SetProgressToken(videoId, record.ProgressUpdatedAt);
+                else
+                    repo.UpsertProgress(record);
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[PlayVideoPage] Watch progress sync failed: {e.Message}");
             }
+            finally
+            {
+                done.TrySetResult();
+            }
         }
-
-        private static string ProgressUpdatedAt(PlaylistItem item) =>
-            item == null ? null : ProjectCacheRepository.Instance.GetProgressUpdatedAt(item.VideoId);
 
         // ── Controls visibility ───────────────────────────────────────
 

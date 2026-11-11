@@ -150,6 +150,26 @@ namespace Kyalio.Repositories.V2
             OnProgressChanged?.Invoke(videoId);
         }
 
+        /// <summary>
+        /// Stores the server's conflict token for a video without touching its progress. Used
+        /// when a PATCH reply arrives after a newer local position was cached: the newer
+        /// position stays on screen and its own PATCH is sent with this token.
+        /// </summary>
+        public void SetProgressToken(string videoId, string progressUpdatedAt)
+        {
+            if (string.IsNullOrEmpty(videoId) ||
+                !_progressByVideoId.TryGetValue(videoId, out var current)) return;
+
+            _progressByVideoId[videoId] = new ProgressItem
+            {
+                ProjectId         = current.ProjectId,
+                VideoId           = videoId,
+                ProgressMs        = current.ProgressMs,
+                ProgressUpdatedAt = progressUpdatedAt,
+                LastDeviceType    = current.LastDeviceType,
+            };
+        }
+
         // ── Lookups ──────────────────────────────────────────────────
 
         public Project Get(string projectId) =>

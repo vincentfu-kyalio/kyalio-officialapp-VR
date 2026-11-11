@@ -98,6 +98,11 @@ namespace Kyalio.Pages
                 downloadAllButton.onClick.AddListener(() => OnDownloadAllClickAsync().Forget());
         }
 
+        // The progress event is static: a page torn down without OnExit (scene unload, quit)
+        // must not leave a handler that touches destroyed UI from the repository's writes.
+        private void OnDestroy() =>
+            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
+
         public void OnEnter(object param)
         {
             SubscribeDownloadEvents();
