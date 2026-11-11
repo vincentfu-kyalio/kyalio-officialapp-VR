@@ -260,6 +260,11 @@ namespace Kyalio.Core
 
         private void GoBackImmediate()
         {
+            // A faded GoBack runs at black, after it was requested. A navigation queued in the
+            // same transition (e.g. a sign-out's SwitchPage to Login) may have cleared the
+            // history meanwhile; there is then nothing to go back to.
+            if (_history.Count == 0) return;
+
             if (_currentPage.HasValue)
                 ExitPage(_currentPage.Value);
 
