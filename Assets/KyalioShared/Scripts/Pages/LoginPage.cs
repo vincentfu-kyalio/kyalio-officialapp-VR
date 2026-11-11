@@ -9,6 +9,7 @@ using Kyalio.Repositories.V2;
 using Kyalio.Services;
 using Kyalio.State.V2;
 using Kyalio.Utils;
+using Kyalio.VRKeyboard;
 using Newtonsoft.Json;
 using TMPro;
 using UnityEngine;
@@ -55,6 +56,8 @@ namespace Kyalio.Pages
         [SerializeField] private Button _usePasswordButton;
 
         [Header("Shared")]
+        [Tooltip("In-world keyboard for the email and password fields. Found in the scene when left empty.")]
+        [SerializeField] private VirtualKeyboard _keyboard;
         [SerializeField] private GameObject _loadingIndicator;
         [SerializeField] private GameObject _tabBarRoot;
 
@@ -77,12 +80,25 @@ namespace Kyalio.Pages
             if (_usePasswordButton != null)    _usePasswordButton.onClick.AddListener(() => SetMode(Mode.Password));
             if (_showPasswordToggle != null)   _showPasswordToggle.onValueChanged.AddListener(ApplyPasswordVisibility);
             if (_rememberToggle != null)       _rememberToggle.onValueChanged.AddListener(OnRememberChanged);
-            SystemKeyboardInput.EnsureOn(_emailInput);
-            SystemKeyboardInput.EnsureOn(_passwordInput);
+            // In-world keyboard (Kyalio.VRKeyboard): no system keyboard, so the overlay canvas
+            // stays on and the fields keep a caret that the pointer can move. Falls back to
+            // the system keyboard (with the overlay suspend) when the scene has no keyboard.
+            if (_keyboard == null) _keyboard = FindFirstObjectByType<VirtualKeyboard>(FindObjectsInactive.Include);
+            if (_keyboard != null)
+            {
+                _keyboard.Register(_emailInput, KeyboardLayoutKind.Email);
+                _keyboard.Register(_passwordInput, KeyboardLayoutKind.Text);
+            }
+            else
+            {
+                SystemKeyboardInput.EnsureOn(_emailInput);
+                SystemKeyboardInput.EnsureOn(_passwordInput);
+            }
 
             // No onSubmit → login: the Quest system keyboard reports Status.Done on any
             // close (checkmark or hide), and TMP turns Done into onSubmit, so dismissing
-            // the keyboard would sign in. Login is triggered only by the Login button.
+            // the keyboard would sign in. Login is triggered only by the Login button
+            // (the in-world keyboard's Done only closes it).
         }
 
         // ── IPageHandler ──────────────────────────────────────────────
