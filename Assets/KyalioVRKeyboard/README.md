@@ -9,7 +9,9 @@ An in-world keyboard for `TMP_InputField`s on a world-space canvas in VR.
   - **Symbols pages:** numbers and common symbols (`123`), and the remaining ASCII symbols (`#+=`), so any password can be typed.
   - **Email:** adds `@` and `.com` keys to the letters page, and has no space key.
   - **Number pad:** for codes.
-- **Built from one key template:** restyle the template and every key follows it.
+- **Built from key templates:** one each for character keys, function keys (Shift, Del, page switches) and the accent key (Done). Restyle a template and every key of that kind follows it.
+- **Clear states:** hover, pressed (the key also shrinks a little), Shift on, and caps lock (its own colour plus an optional indicator).
+- **Fades and slides in and out** when it shows and hides.
 
 Depends only on Unity UI and TextMeshPro (`Kyalio.VRKeyboard.asmdef`). To use it in another project, copy the `KyalioVRKeyboard` folder.
 
@@ -18,14 +20,20 @@ Depends only on Unity UI and TextMeshPro (`Kyalio.VRKeyboard.asmdef`). To use it
 1. Select the world-space Canvas (or an object under it that **stays active**) and choose **GameObject → Kyalio → VR Keyboard**. This creates the following:
 
    ```
-   VR Keyboard        VirtualKeyboard — the controller, stays here
-   └ Panel            the visible keyboard (background Image, its size = keyboard size)
-     └ Keys           key area, inset for padding
-       └ Key Template KeyboardKey: background Image + Label (TMP) + Icon (inactive)
-   Keyboard Dock      where the keyboard appears (its centre) — move it in the Scene view
+   VR Keyboard                VirtualKeyboard — the controller, stays here
+   └ Panel                    the visible keyboard (background Image, its size = keyboard size)
+     └ Keys                   key area, inset for padding
+       ├ Key Template             character keys
+       ├ Function Key Template    Shift, Del, 123 / ABC / #+=  (with a caps-lock indicator bar)
+       └ Accent Key Template      Done
+   Keyboard Dock              where the keyboard appears (its centre) — move it in the Scene view
    ```
 
-2. Style **Panel** and **Key Template** however you like: colours, sprites, the label's font. You can also set the Del / Shift / Done icons on `VirtualKeyboard`.
+   Each template is a `KeyboardKey` with a background Image, a Label (TMP) and an Icon (inactive).
+
+2. Style the **Panel** and the **templates** however you like: sprites, the label's font, sizes. Key **colours** are set on each template's `KeyboardKey` (Normal, Highlighted, Pressed, Active = Shift on, Locked = caps lock); they replace the background Image's colour. Icons for Del, Shift, caps lock and Done go on `VirtualKeyboard`, and so do the show / hide timing and slide distance.
+
+   The function and accent templates are optional: without them, those keys use the character template.
 3. Register the fields from code:
 
    ```csharp

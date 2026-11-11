@@ -18,16 +18,16 @@ namespace Kyalio.VRKeyboard
     ///
     /// How focus is kept: while shown, the keyboard is parented under the focused field
     /// (placed at the dock's pose, drawn by its own nested Canvas so nothing covers it and no
-    /// parent mask clips it). A press on a key — which is not a Selectable — makes the event
-    /// system look up the hierarchy for a select handler, find the already-selected field
-    /// and leave the selection alone. Typing goes through TMP_InputField.ProcessEvent, so
-    /// content type, validation, character limit and selection replacement all apply.
+    /// parent mask clips it). A press on a key (not a Selectable) makes the event system
+    /// look up the hierarchy for a select handler, find the already-selected field and leave
+    /// the selection alone. Typing goes through TMP_InputField.ProcessEvent, so content type,
+    /// validation, character limit and selection replacement all apply.
     ///
     /// Scene setup (see README): this component on an object that stays active (it polls
     /// focus every frame), with a child panel (a RectTransform with the background Image,
-    /// sized as the keyboard) holding the key area and an inactive key template with
-    /// <see cref="KeyboardKey"/>. Only the panel moves under the focused field; it hides by
-    /// disabling its own Canvas.
+    /// sized as the keyboard) holding the key area and inactive key templates with
+    /// <see cref="KeyboardKey"/>. Only the panel moves under the focused field; it fades and
+    /// slides in and out, and hides by disabling its own Canvas.
     /// </summary>
     [DisallowMultipleComponent]
     public class VirtualKeyboard : MonoBehaviour
@@ -37,8 +37,14 @@ namespace Kyalio.VRKeyboard
         [SerializeField] private RectTransform panel;
         [Tooltip("Where the keys are laid out (inside the panel, inset for padding).")]
         [SerializeField] private RectTransform keyArea;
-        [Tooltip("Key template, cloned for every key. Kept inactive.")]
+        [Tooltip("Template for character keys (letters, digits, symbols, space). Required; kept inactive.")]
         [SerializeField] private KeyboardKey keyTemplate;
+        [Tooltip("Optional template for Shift, Backspace and page keys (123 / ABC / #+=). " +
+                 "Falls back to the character template.")]
+        [SerializeField] private KeyboardKey functionKeyTemplate;
+        [Tooltip("Optional template for the primary action (Done). Falls back to the function " +
+                 "template, then the character template.")]
+        [SerializeField] private KeyboardKey accentKeyTemplate;
         [Tooltip("Where the keyboard appears (its center) unless a field registers its own dock.")]
         [SerializeField] private RectTransform defaultDock;
 
@@ -50,13 +56,22 @@ namespace Kyalio.VRKeyboard
         [Header("Labels")]
         [SerializeField] private string backspaceLabel = "Del";
         [SerializeField] private string shiftLabel = "Shift";
+        [SerializeField] private string capsLockLabel = "CAPS";
         [SerializeField] private string doneLabel = "Done";
         [SerializeField] private string spaceLabel = "Space";
 
         [Header("Icons (optional; replace the label when set)")]
         [SerializeField] private Sprite backspaceIcon;
         [SerializeField] private Sprite shiftIcon;
+        [Tooltip("Shift key while caps lock is on. Falls back to the Shift icon.")]
+        [SerializeField] private Sprite capsLockIcon;
         [SerializeField] private Sprite doneIcon;
+
+        [Header("Show / hide")]
+        [SerializeField, Min(0f)] private float showDuration = 0.15f;
+        [SerializeField, Min(0f)] private float hideDuration = 0.1f;
+        [Tooltip("How far (in panel units) the keyboard slides up while appearing, and down while hiding.")]
+        [SerializeField, Min(0f)] private float slideDistance = 30f;
 
         [Header("Behaviour")]
         [Tooltip("Hold Backspace this long before it repeats.")]
@@ -82,19 +97,28 @@ namespace Kyalio.VRKeyboard
             public bool HideSoftKeyboard, HideMobileInput;
         }
 
+        private enum Fade { None, Showing, Hiding }
+
         private readonly Dictionary<TMP_InputField, Registration> _fields = new();
-        private readonly List<KeyboardKey> _keys = new();
+        private readonly List<TMP_InputField> _destroyedFields = new();
+
+        // Key objects per template, reused across pages; _shownKeys are the current page's.
+        private readonly Dictionary<KeyStyle, List<KeyboardKey>> _pools = new();
+        private readonly List<KeyboardKey> _shownKeys = new();
+
         // Created on first use: Event's setters may not run in a MonoBehaviour constructor
         // (field initializer).
         private Event _event;
-
         private Event KeyEvent => _event ??= new Event { type = EventType.KeyDown };
 
         private Transform _home;
         private RectTransform _panelSpare;
-        private string _keyAreaPath, _templatePath;
+        private string _keyAreaPath;
+        private readonly Dictionary<KeyStyle, string> _templatePaths = new();
+        private bool _hasFunctionTemplate, _hasAccentTemplate;
         private Canvas _canvas;
         private BaseRaycaster _raycaster;
+        private CanvasGroup _group;
 
         private TMP_InputField _target;
         private Registration _registration;
@@ -105,6 +129,10 @@ namespace Kyalio.VRKeyboard
         private float _lastShiftTime = -1f;
         private KeyboardKey _repeatKey;
         private float _nextRepeatTime;
+
+        private Fade _fade;
+        private float _fadeFrom, _fadeStart;
+        private Vector3 _restPosition;   // the panel's placed localPosition while attached
 
         // ── Public API ────────────────────────────────────────────────
 
@@ -146,9 +174,9 @@ namespace Kyalio.VRKeyboard
             _fields.Remove(field);
             field.shouldHideSoftKeyboard = registration.HideSoftKeyboard;
             field.shouldHideMobileInput = registration.HideMobileInput;
-            // May be called from a field's OnDisable / OnDestroy: hide only, LateUpdate
-            // moves the panel home.
-            if (field == _target) Detach(returnHome: false);
+            // May be called from a field's OnDisable / OnDestroy: hide at once, no fade;
+            // LateUpdate moves the panel home.
+            if (field == _target) Detach(animate: false);
         }
 
         /// <summary>Closes the keyboard by deselecting the field being typed into.</summary>
@@ -159,42 +187,43 @@ namespace Kyalio.VRKeyboard
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == field.gameObject)
                 EventSystem.current.SetSelectedGameObject(null);
             field.DeactivateInputField();
-            Detach();
+            Detach(animate: true);
         }
 
-        // ── Lifecycle ─────────────────────────────────────────────────
-
         /// <summary>
-        /// The parts the keyboard needs are assigned and laid out as expected (key area and
-        /// key template inside the panel). When false, Register refuses fields so they keep
-        /// their platform keyboard.
+        /// The parts the keyboard needs are assigned and laid out as expected (key area inside
+        /// the panel, templates inside the key area). When false, Register refuses fields so
+        /// they keep their platform keyboard.
         /// </summary>
         public bool IsUsable =>
             panel != null && keyArea != null && keyTemplate != null &&
-            IsWithin(keyArea, panel) && IsWithin(keyTemplate.transform, keyArea);
+            IsWithin(keyArea, panel) && IsWithin(keyTemplate.transform, keyArea) &&
+            (functionKeyTemplate == null || IsWithin(functionKeyTemplate.transform, keyArea)) &&
+            (accentKeyTemplate == null || IsWithin(accentKeyTemplate.transform, keyArea));
 
-        private static bool IsWithin(Transform child, Transform root)
-        {
-            for (var t = child; t != null; t = t.parent)
-                if (t == root) return true;
-            return false;
-        }
+        // ── Lifecycle ─────────────────────────────────────────────────
 
         private void Awake()
         {
             if (!IsUsable)
             {
                 Debug.LogError("[VirtualKeyboard] Panel, Key Area and Key Template must be assigned, " +
-                               "with the key area inside the panel and the template inside the key area. " +
+                               "with the key area inside the panel and the templates inside the key area. " +
                                "Keyboard disabled.", this);
                 enabled = false;
                 return;
             }
 
             _home = transform;
+            _hasFunctionTemplate = functionKeyTemplate != null;
+            _hasAccentTemplate = accentKeyTemplate != null;
             _keyAreaPath = PathFrom(panel, keyArea);
-            _templatePath = PathFrom(panel, keyTemplate.transform);
-            keyTemplate.gameObject.SetActive(false);
+            foreach (KeyStyle style in Enum.GetValues(typeof(KeyStyle)))
+            {
+                var template = TemplateFor(style);
+                _templatePaths[style] = PathFrom(panel, template.transform);
+                template.gameObject.SetActive(false);
+            }
 
             // While attached, the panel is a child of the field: destroying the field (or its
             // page) destroys the panel too. Keep an inactive spare to rebuild it from.
@@ -205,57 +234,10 @@ namespace Kyalio.VRKeyboard
             SetupPanel();
         }
 
-        private void SetupPanel()
-        {
-            var go = panel.gameObject;
-            if (!go.TryGetComponent<KeyboardSurface>(out _)) go.AddComponent<KeyboardSurface>();
-
-            // Never resized or positioned by a layout group of the field it is attached to.
-            if (!go.TryGetComponent<LayoutElement>(out var layout)) layout = go.AddComponent<LayoutElement>();
-            layout.ignoreLayout = true;
-
-            if (!go.TryGetComponent(out _canvas)) _canvas = go.AddComponent<Canvas>();
-            // Keep a raycaster set up on the panel (e.g. an XR one); otherwise a plain one.
-            if (!go.TryGetComponent(out _raycaster)) _raycaster = go.AddComponent<GraphicRaycaster>();
-            go.SetActive(true);
-            SetVisible(false);
-        }
-
-        // The panel was destroyed with the field it was attached to: rebuild it from the spare.
-        private bool EnsurePanel()
-        {
-            if (panel != null) return true;
-            if (_panelSpare == null) return false;
-
-            panel = Instantiate(_panelSpare, _home);
-            panel.name = _panelSpare.name.Replace(" (Spare)", string.Empty);
-            keyArea = (RectTransform)FindUnder(panel, _keyAreaPath);
-            keyTemplate = FindUnder(panel, _templatePath).GetComponent<KeyboardKey>();
-            _keys.Clear();
-            _pages = null;
-            _registration = null;
-            SetupPanel();
-            return true;
-        }
-
-        // Path of child below root ("" when child is root itself). IsUsable guarantees
-        // child is root or one of its descendants.
-        private static string PathFrom(Transform root, Transform child)
-        {
-            if (child == root) return string.Empty;
-            var path = child.name;
-            for (var t = child.parent; t != null && t != root; t = t.parent)
-                path = t.name + "/" + path;
-            return path;
-        }
-
-        private static Transform FindUnder(Transform root, string path) =>
-            string.IsNullOrEmpty(path) ? root : root.Find(path);
-
         // Only hide here: OnDisable also runs while the hierarchy is being deactivated (e.g.
         // leaving Play mode), when Unity refuses to reparent the panel out of the field it
         // is attached to. LateUpdate moves it home once that is allowed again.
-        private void OnDisable() => Detach(returnHome: false);
+        private void OnDisable() => Detach(animate: false);
 
         // Destroyed while attached: don't leave the panel behind under the field.
         private void OnDestroy()
@@ -265,7 +247,7 @@ namespace Kyalio.VRKeyboard
 
         private void LateUpdate()
         {
-            if (_target == null) ReturnPanelHome();
+            if (_target == null && _fade != Fade.Hiding) ReturnPanelHome();
 
             var focused = FindFocusedField();
             if (focused != null)
@@ -277,7 +259,7 @@ namespace Kyalio.VRKeyboard
             {
                 // A frame of grace: TMP activates a field in the LateUpdate after it is
                 // selected, so focus can read false for one frame while switching fields.
-                Detach();
+                Detach(animate: true);
             }
 
             // Only into the field that still has focus (not during the grace frame above).
@@ -290,9 +272,9 @@ namespace Kyalio.VRKeyboard
                 Backspace();
                 KeyPressed?.Invoke();   // each repeat, like the first press
             }
-        }
 
-        private readonly List<TMP_InputField> _destroyedFields = new();
+            UpdateFade();
+        }
 
         private TMP_InputField FindFocusedField()
         {
@@ -310,6 +292,78 @@ namespace Kyalio.VRKeyboard
             }
             return focused;
         }
+
+        // ── Panel ─────────────────────────────────────────────────────
+
+        private void SetupPanel()
+        {
+            var go = panel.gameObject;
+            if (!go.TryGetComponent<KeyboardSurface>(out _)) go.AddComponent<KeyboardSurface>();
+
+            // Never resized or positioned by a layout group of the field it is attached to.
+            if (!go.TryGetComponent<LayoutElement>(out var layout)) layout = go.AddComponent<LayoutElement>();
+            layout.ignoreLayout = true;
+
+            if (!go.TryGetComponent(out _canvas)) _canvas = go.AddComponent<Canvas>();
+            // Keep a raycaster set up on the panel (e.g. an XR one); otherwise a plain one.
+            if (!go.TryGetComponent(out _raycaster)) _raycaster = go.AddComponent<GraphicRaycaster>();
+            if (!go.TryGetComponent(out _group)) _group = go.AddComponent<CanvasGroup>();
+
+            go.SetActive(true);
+            _fade = Fade.None;
+            SetVisible(false);
+        }
+
+        // The panel was destroyed with the field it was attached to: rebuild it from the spare.
+        private bool EnsurePanel()
+        {
+            if (panel != null) return true;
+            if (_panelSpare == null) return false;
+
+            panel = Instantiate(_panelSpare, _home);
+            panel.name = _panelSpare.name.Replace(" (Spare)", string.Empty);
+            keyArea = (RectTransform)FindUnder(panel, _keyAreaPath);
+            keyTemplate = TemplateAt(KeyStyle.Character);
+            functionKeyTemplate = _hasFunctionTemplate ? TemplateAt(KeyStyle.Function) : null;
+            accentKeyTemplate = _hasAccentTemplate ? TemplateAt(KeyStyle.Accent) : null;
+            _pools.Clear();
+            _shownKeys.Clear();
+            _pages = null;
+            _registration = null;
+            SetupPanel();
+            return true;
+        }
+
+        private KeyboardKey TemplateAt(KeyStyle style) =>
+            FindUnder(panel, _templatePaths[style]).GetComponent<KeyboardKey>();
+
+        private KeyboardKey TemplateFor(KeyStyle style) => style switch
+        {
+            KeyStyle.Accent   => accentKeyTemplate != null ? accentKeyTemplate : TemplateFor(KeyStyle.Function),
+            KeyStyle.Function => functionKeyTemplate != null ? functionKeyTemplate : keyTemplate,
+            _                 => keyTemplate,
+        };
+
+        private static bool IsWithin(Transform child, Transform root)
+        {
+            for (var t = child; t != null; t = t.parent)
+                if (t == root) return true;
+            return false;
+        }
+
+        // Path of child below root ("" when child is root itself). IsUsable guarantees
+        // child is root or one of its descendants.
+        private static string PathFrom(Transform root, Transform child)
+        {
+            if (child == root) return string.Empty;
+            var path = child.name;
+            for (var t = child.parent; t != null && t != root; t = t.parent)
+                path = t.name + "/" + path;
+            return path;
+        }
+
+        private static Transform FindUnder(Transform root, string path) =>
+            string.IsNullOrEmpty(path) ? root : root.Find(path);
 
         // ── Show / hide ───────────────────────────────────────────────
 
@@ -337,7 +391,7 @@ namespace Kyalio.VRKeyboard
             }
             else
             {
-                // No dock anywhere: just below the field, in its own space — never the
+                // No dock anywhere: just below the field, in its own space, never the
                 // offset or scale left over from the previous field.
                 var fieldRect = ((RectTransform)field.transform).rect;
                 panel.localRotation = Quaternion.identity;
@@ -345,6 +399,7 @@ namespace Kyalio.VRKeyboard
                 panel.localPosition = new Vector3(
                     fieldRect.center.x, fieldRect.yMin - spacing - panel.rect.height / 2f, 0f);
             }
+            _restPosition = panel.localPosition;
 
             var parentCanvas = field.GetComponentInParent<Canvas>();
             if (parentCanvas != null)
@@ -364,16 +419,29 @@ namespace Kyalio.VRKeyboard
                 RefreshLabels();
             }
 
+            // Fade in, from where a hide in progress left off.
+            bool wasShown = _canvas.enabled;
             SetVisible(true);
+            StartFade(Fade.Showing, wasShown ? _group.alpha : 0f);
         }
 
-        private void Detach(bool returnHome = true)
+        // animate: false where reparenting or waiting is not possible (OnDisable, Unregister).
+        private void Detach(bool animate)
         {
             _repeatKey = null;
             _target = null;
             _registration = null;   // the next focus starts on the layout's first page
+
+            if (_raycaster != null) _raycaster.enabled = false;   // no clicks while fading out
+            if (animate && hideDuration > 0f && _canvas != null && _canvas.enabled && panel != null)
+            {
+                StartFade(Fade.Hiding, _group.alpha);   // LateUpdate moves it home when done
+                return;
+            }
+
+            _fade = Fade.None;
             SetVisible(false);
-            if (returnHome) ReturnPanelHome();
+            if (animate) ReturnPanelHome();
         }
 
         // Back under the controller, so the panel is never left under a field that may be
@@ -388,6 +456,46 @@ namespace Kyalio.VRKeyboard
         {
             if (_canvas != null) _canvas.enabled = visible;
             if (_raycaster != null) _raycaster.enabled = visible;
+            if (_group != null) _group.alpha = visible ? _group.alpha : 0f;
+        }
+
+        // ── Fade ──────────────────────────────────────────────────────
+
+        private void StartFade(Fade fade, float fromAlpha)
+        {
+            _fade = fade;
+            _fadeFrom = fromAlpha;
+            _fadeStart = Time.unscaledTime;
+            UpdateFade();
+        }
+
+        // Fades the panel's alpha and slides it: up into place while showing, down while
+        // hiding. Driven by the controller, so it runs even while the panel's page is hidden.
+        private void UpdateFade()
+        {
+            if (_fade == Fade.None || panel == null || _group == null) return;
+
+            bool showing = _fade == Fade.Showing;
+            float target = showing ? 1f : 0f;
+            float duration = (showing ? showDuration : hideDuration) * Mathf.Abs(target - _fadeFrom);
+            float t = duration > 0f ? Mathf.Clamp01((Time.unscaledTime - _fadeStart) / duration) : 1f;
+            float eased = 1f - (1f - t) * (1f - t) * (1f - t);   // ease out cubic
+
+            float alpha = Mathf.Lerp(_fadeFrom, target, eased);
+            _group.alpha = alpha;
+            // Offset by how far from fully shown: 0 at alpha 1, slideDistance at alpha 0.
+            panel.localPosition = _restPosition + panel.localRotation * Vector3.down *
+                                  (slideDistance * panel.localScale.y * (1f - alpha));
+
+            if (t < 1f) return;
+            if (showing)
+            {
+                _fade = Fade.None;
+                return;
+            }
+            _fade = Fade.None;
+            SetVisible(false);
+            ReturnPanelHome();
         }
 
         // ── Layout ────────────────────────────────────────────────────
@@ -411,7 +519,8 @@ namespace Kyalio.VRKeyboard
                 unitW = Mathf.Min(unitW, fit);
             }
 
-            int index = 0;
+            _shownKeys.Clear();
+            var used = new Dictionary<KeyStyle, int>();
             for (int r = 0; r < rows; r++)
             {
                 var row = page.Rows[r];
@@ -423,36 +532,46 @@ namespace Kyalio.VRKeyboard
                 foreach (var def in row)
                 {
                     float w = def.Width * unitW;
-                    var key = GetKey(index++);
+                    used.TryGetValue(def.Style, out int n);
+                    used[def.Style] = n + 1;
+
+                    var key = GetKey(def.Style, n);
                     key.Rect.anchorMin = key.Rect.anchorMax = key.Rect.pivot = new Vector2(0.5f, 0.5f);
                     key.Rect.sizeDelta = new Vector2(w, unitH);
                     key.Rect.localPosition = new Vector3(x + w / 2f, y, 0f);
                     key.Setup(def, LabelFor(def), IconFor(def));
+                    _shownKeys.Add(key);
                     x += w + spacing;
                 }
             }
 
-            for (int i = index; i < _keys.Count; i++)
-                _keys[i].gameObject.SetActive(false);
+            // Hide the pooled keys this page doesn't use.
+            foreach (var pool in _pools)
+            {
+                used.TryGetValue(pool.Key, out int n);
+                for (int i = n; i < pool.Value.Count; i++)
+                    pool.Value[i].gameObject.SetActive(false);
+            }
 
             RefreshLabels();
         }
 
-        private KeyboardKey GetKey(int index)
+        private KeyboardKey GetKey(KeyStyle style, int index)
         {
-            if (index < _keys.Count)
+            if (!_pools.TryGetValue(style, out var pool)) _pools[style] = pool = new List<KeyboardKey>();
+            if (index < pool.Count)
             {
-                _keys[index].gameObject.SetActive(true);
-                return _keys[index];
+                pool[index].gameObject.SetActive(true);
+                return pool[index];
             }
 
-            var key = Instantiate(keyTemplate, keyArea);
-            key.name = $"Key {index}";
+            var key = Instantiate(TemplateFor(style), keyArea);
+            key.name = $"{style} Key {index}";
             key.gameObject.SetActive(true);
             key.Pressed += OnKeyPressed;
             key.Released += OnKeyReleased;
             key.Clicked += OnKeyClicked;
-            _keys.Add(key);
+            pool.Add(key);
             return key;
         }
 
@@ -462,7 +581,7 @@ namespace Kyalio.VRKeyboard
             switch (def.Action)
             {
                 case KeyAction.Backspace: return backspaceLabel;
-                case KeyAction.Shift:     return shiftLabel;
+                case KeyAction.Shift:     return _capsLock ? capsLockLabel : shiftLabel;
                 case KeyAction.Done:      return doneLabel;
             }
             if (def.Value == " ") return spaceLabel;
@@ -473,20 +592,23 @@ namespace Kyalio.VRKeyboard
         private Sprite IconFor(KeyDef def) => def.Action switch
         {
             KeyAction.Backspace => backspaceIcon,
-            KeyAction.Shift     => shiftIcon,
+            KeyAction.Shift     => _capsLock && capsLockIcon != null ? capsLockIcon : shiftIcon,
             KeyAction.Done      => doneIcon,
             _                   => null,
         };
 
-        // Letters follow Shift; Shift is lit while on.
+        // Letters follow Shift; Shift shows on / caps lock.
         private void RefreshLabels()
         {
-            foreach (var key in _keys)
+            foreach (var key in _shownKeys)
             {
-                if (!key.gameObject.activeSelf) continue;
                 var def = key.Def;
                 if (def.IsLetter) key.SetLabel(LabelFor(def));
-                if (def.Action == KeyAction.Shift) key.SetActive(_shift || _capsLock);
+                if (def.Action == KeyAction.Shift)
+                {
+                    key.SetLabel(LabelFor(def), IconFor(def));
+                    key.SetToggle(_shift, _capsLock);
+                }
             }
         }
 

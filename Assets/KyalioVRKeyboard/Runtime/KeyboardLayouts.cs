@@ -13,6 +13,17 @@ namespace Kyalio.VRKeyboard
         Numeric,
     }
 
+    /// <summary>Which key template a key is built from.</summary>
+    public enum KeyStyle
+    {
+        /// <summary>Letters, digits, symbols, space.</summary>
+        Character,
+        /// <summary>Shift, Backspace, page switches (123 / ABC / #+=).</summary>
+        Function,
+        /// <summary>The primary action: Done.</summary>
+        Accent,
+    }
+
     internal enum KeyAction
     {
         /// <summary>Types <see cref="KeyDef.Value"/> (a letter follows Shift).</summary>
@@ -42,6 +53,13 @@ namespace Kyalio.VRKeyboard
 
         public bool IsLetter => Action == KeyAction.Insert && Value != null && Value.Length == 1 &&
                                 char.IsLetter(Value[0]);
+
+        public KeyStyle Style => Action switch
+        {
+            KeyAction.Insert => KeyStyle.Character,
+            KeyAction.Done   => KeyStyle.Accent,
+            _                => KeyStyle.Function,
+        };
     }
 
     internal sealed class KeyboardPage

@@ -31,12 +31,25 @@ namespace Kyalio.VRKeyboard
         [Tooltip("Optional. Shown instead of the label when the keyboard gives this key an icon.")]
         [SerializeField] private Image icon;
 
-        [Header("Colors (multiplied with the background Image color)")]
-        [SerializeField] private Color normalColor      = Color.white;
-        [SerializeField] private Color highlightedColor = new(0.9f, 0.9f, 0.9f, 1f);
-        [SerializeField] private Color pressedColor     = new(0.7f, 0.7f, 0.7f, 1f);
-        [Tooltip("Shift (and caps lock) while on.")]
-        [SerializeField] private Color activeColor      = new(0.55f, 0.75f, 1f, 1f);
+        [Tooltip("Optional. Shown only while caps lock is on (e.g. a small dot or bar), so caps lock " +
+                 "reads differently from a one-shot Shift.")]
+        [SerializeField] private GameObject lockIndicator;
+
+        // The background Image's color per state (set directly, so each state is exactly the
+        // color shown; style function / accent keys by giving their templates other colors).
+        [Header("Background colors")]
+        [SerializeField] private Color normalColor      = new(0.26f, 0.27f, 0.30f, 1f);
+        [Tooltip("Pointer over the key: shows where the ray is before pressing.")]
+        [SerializeField] private Color highlightedColor = new(0.36f, 0.38f, 0.43f, 1f);
+        [SerializeField] private Color pressedColor     = new(0.18f, 0.19f, 0.21f, 1f);
+        [Tooltip("Shift while on for the next letter.")]
+        [SerializeField] private Color activeColor      = new(0.31f, 0.47f, 0.78f, 1f);
+        [Tooltip("Shift while caps lock is on.")]
+        [SerializeField] private Color lockedColor      = new(0.20f, 0.42f, 0.90f, 1f);
+
+        [Header("Press")]
+        [Tooltip("Scale while pressed, so a press is visible even without a physical key.")]
+        [SerializeField, Range(0.5f, 1f)] private float pressedScale = 0.94f;
 
         internal event Action<KeyboardKey> Pressed;    // pointer down
         internal event Action<KeyboardKey> Released;   // pointer up
@@ -44,7 +57,7 @@ namespace Kyalio.VRKeyboard
 
         internal KeyDef Def { get; private set; }
 
-        private bool _hovered, _down, _active;
+        private bool _hovered, _down, _active, _locked;
 
         public RectTransform Rect => (RectTransform)transform;
 
@@ -55,7 +68,7 @@ namespace Kyalio.VRKeyboard
             // Keep _hovered: a page switch reuses the key under the pointer, which is still
             // hovering it (OnDisable clears hover for keys that are hidden).
             _down = false;
-            SetActive(false);
+            SetToggle(false, false);
         }
 
         internal void SetLabel(string text, Sprite iconSprite = null)
@@ -73,18 +86,24 @@ namespace Kyalio.VRKeyboard
             }
         }
 
-        /// <summary>Lit state for Shift / caps lock.</summary>
-        internal void SetActive(bool active)
+        /// <summary>Shift state: on (next letter upper case) and locked (caps lock).</summary>
+        internal void SetToggle(bool active, bool locked)
         {
-            _active = active;
+            _active = active || locked;
+            _locked = locked;
+            if (lockIndicator != null) lockIndicator.SetActive(locked);
             Refresh();
         }
 
         private void Refresh()
         {
-            if (background == null) return;
-            background.canvasRenderer.SetColor(
-                _down ? pressedColor : _active ? activeColor : _hovered ? highlightedColor : normalColor);
+            if (background != null)
+                background.color =
+                    _down    ? pressedColor :
+                    _locked  ? lockedColor :
+                    _active  ? activeColor :
+                    _hovered ? highlightedColor : normalColor;
+            transform.localScale = _down ? new Vector3(pressedScale, pressedScale, 1f) : Vector3.one;
         }
 
         private void OnDisable()
