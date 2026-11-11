@@ -6,7 +6,6 @@ using Cysharp.Threading.Tasks;
 using Kyalio.Core;
 using Kyalio.Models;
 using Kyalio.State;
-using Kyalio.State.V2;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -14,8 +13,8 @@ namespace Kyalio.Services
 {
     /// <summary>
     /// Video download manager: single active download with a FIFO queue.
-    /// Attach to the same GameObject as AppManager (already DontDestroyOnLoad).
-    /// AppManager.Awake calls Initialize(baseUrl).
+    /// Attach to a DontDestroyOnLoad GameObject. Files are laid out by DownloadStorage;
+    /// the legacy-storage cleanup runs from AppBootstrapper, not from here.
     /// </summary>
     public class DownloadManager : MonoBehaviour
     {
@@ -50,22 +49,6 @@ namespace Kyalio.Services
         public void Initialize(string baseUrl)
         {
             _baseUrl = baseUrl.TrimEnd('/');
-            DownloadedVideoState.Instance.MigrateLegacyStorage();
-        }
-
-        private void OnEnable()  => AppState.OnLoggedIn += FlushPendingServerDeletes;
-        private void OnDisable() => AppState.OnLoggedIn -= FlushPendingServerDeletes;
-
-        /// <summary>
-        /// Tells the server about local files discarded while signed out (legacy upgrade).
-        /// Best effort: each DELETE is sent once and a failure is not retried.
-        /// </summary>
-        private static void FlushPendingServerDeletes()
-        {
-            var download = ServiceLocator.Instance?.V2?.Download;
-            if (download == null) return;
-            foreach (var p in DownloadedVideoState.Instance.TakePendingServerDeletes())
-                download.DeleteAsync(p.ProjectId, p.VideoId).Forget();
         }
 
         private void OnApplicationPause(bool paused)
@@ -172,8 +155,13 @@ namespace Kyalio.Services
             try
             {
                 DownloadStorage.EnsureRoot();
-                // A file shorter than the header was cut off while being created: start over.
-                if (!File.Exists(destPath) || new FileInfo(destPath).Length < headerSize)
+                // Start over when the file is missing, was cut off inside the header, or already
+                // holds every media byte without a record (e.g. a crash before AddRecord): a
+                // Range from the end would only get 416 back, failing every retry.
+                long mediaBytes = File.Exists(destPath)
+                    ? new FileInfo(destPath).Length - headerSize
+                    : -1;
+                if (mediaBytes < 0 || (task.TotalBytes > 0 && mediaBytes >= task.TotalBytes))
                     DownloadStorage.WriteHeader(destPath);
             }
             catch (Exception e)
@@ -235,9 +223,11 @@ namespace Kyalio.Services
                 }
 
                 // Range request sent but server returned 200 (not supported); partial file is corrupted — delete and let the user retry
-                if (useRange && req.responseCode == 200)
+                // 416: the partial file no longer lines up with the remote one. Either way the
+                // partial file is unusable — delete it so the retry starts clean.
+                if (useRange && (req.responseCode == 200 || req.responseCode == 416))
                 {
-                    TryDeleteFile(destPath);
+                    DownloadStorage.TryDelete(destPath);
                     NotifyServerCanceled(task);
                     OnFailed?.Invoke(task.ProjectId, task.VideoId, "Server does not support resume. Please try again.");
                     return;
@@ -293,13 +283,6 @@ namespace Kyalio.Services
         private static void NotifyServerCanceled(DownloadTask task) =>
             ServiceLocator.Instance?.V2?.Download
                 ?.MarkCanceledAsync(task.ProjectId, task.VideoId).Forget();
-
-        // ── Helpers ───────────────────────────────────────────────────
-        private static void TryDeleteFile(string path)
-        {
-            try { if (File.Exists(path)) File.Delete(path); }
-            catch { }
-        }
     }
 
     public class DownloadTask

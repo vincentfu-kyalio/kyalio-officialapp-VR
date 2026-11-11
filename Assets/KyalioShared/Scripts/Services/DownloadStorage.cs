@@ -11,8 +11,10 @@ namespace Kyalio.Services
     /// casual user from browsing to the files and playing or copying them, nothing more.
     ///
     /// On the Quest (Android player):
-    ///   • Files live in the app's internal files dir (Context.getFilesDir), which neither
-    ///     MTP nor `adb pull` can reach on a non-debuggable (release) build.
+    ///   • Files live in the app's internal no-backup dir (Context.getNoBackupFilesDir),
+    ///     which neither MTP nor `adb pull` can reach on a non-debuggable (release) build,
+    ///     and which Auto Backup skips (GB-sized videos would blow its 25 MB quota and
+    ///     cancel the whole app's backup).
     ///   • File names are a hash of project/video ids with a neutral extension, so they do
     ///     not reveal the content or open in a player on a double-click.
     ///   • Each file starts with <see cref="HeaderSize"/> random bytes, so the MP4 boxes are
@@ -45,7 +47,9 @@ namespace Kyalio.Services
         public static string GetFileName(string projectId, string videoId)
         {
             using var sha = SHA256.Create();
-            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes($"{projectId}_{videoId}"));
+            // '\n' cannot appear in an id, so distinct pairs never hash the same input
+            // (with '_', "a_b"+"c" and "a"+"b_c" would collide).
+            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes($"{projectId}\n{videoId}"));
             var sb = new StringBuilder(32);
             for (int i = 0; i < 16; i++) sb.Append(hash[i].ToString("x2"));
             return sb.Append(Extension).ToString();
@@ -72,6 +76,20 @@ namespace Kyalio.Services
             File.WriteAllBytes(path, header);
         }
 
+        /// <summary>Deletes a file if present; failures are logged, never thrown.</summary>
+        public static void TryDelete(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[DownloadStorage] Delete file failed: {e.Message}");
+            }
+        }
+
         private static string ResolveBaseDir()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -79,13 +97,13 @@ namespace Kyalio.Services
             {
                 // Not disposed: Unity hands out a shared, cached activity reference.
                 var activity = UnityEngine.Android.AndroidApplication.currentActivity;
-                using var dir = activity.Call<AndroidJavaObject>("getFilesDir");
+                using var dir = activity.Call<AndroidJavaObject>("getNoBackupFilesDir");
                 var path = dir.Call<string>("getAbsolutePath");
                 if (!string.IsNullOrEmpty(path)) return path;
             }
             catch (Exception e)
             {
-                Debug.LogError($"[DownloadStorage] getFilesDir failed, using persistentDataPath: {e.Message}");
+                Debug.LogError($"[DownloadStorage] getNoBackupFilesDir failed, using persistentDataPath: {e.Message}");
             }
 #endif
             return Application.persistentDataPath;

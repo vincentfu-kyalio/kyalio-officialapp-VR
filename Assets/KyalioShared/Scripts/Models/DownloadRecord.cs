@@ -36,14 +36,4 @@ namespace Kyalio.Models
         [JsonIgnore]
         public bool IsLegacy => string.IsNullOrEmpty(FileName);
     }
-
-    /// <summary>A server-side DELETE /download still owed for a discarded local file.</summary>
-    public class PendingServerDelete
-    {
-        [JsonProperty("projectId")]
-        public string ProjectId;
-
-        [JsonProperty("videoId")]
-        public string VideoId;
-    }
 }

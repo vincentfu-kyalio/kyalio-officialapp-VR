@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using Kyalio.Components;
 using Kyalio.Dev;
 using Kyalio.Services;
+using Kyalio.State;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -48,6 +49,9 @@ namespace Kyalio.Core
         {
             ServiceLocator.Instance.Initialize(_apiBaseUrl, string.Empty, _questAppApiKey);
             DownloadManager.Instance?.Initialize(_apiBaseUrl);
+            // Called here, not through DownloadManager: this Awake runs early (execution order
+            // -10), possibly before DownloadManager.Awake has set Instance.
+            DownloadedVideoState.Instance.MigrateLegacyStorage();
             DevFlags.UseFakeData = _useFakeData;
         }
 
