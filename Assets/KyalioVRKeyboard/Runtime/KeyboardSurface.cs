@@ -11,8 +11,11 @@ namespace Kyalio.VRKeyboard
     [DisallowMultipleComponent]
     public class KeyboardSurface : MonoBehaviour,
         IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
-        IInitializePotentialDragHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+        IInitializePotentialDragHandler, IBeginDragHandler, IDragHandler, IEndDragHandler,
+        IScrollHandler
     {
+        // Scroll too: it would scroll the field's text or a ScrollRect behind the page.
+        public void OnScroll(PointerEventData e) { }
         public void OnPointerDown(PointerEventData e) { }
         public void OnPointerUp(PointerEventData e) { }
         public void OnPointerClick(PointerEventData e) { }

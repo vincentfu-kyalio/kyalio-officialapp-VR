@@ -110,12 +110,17 @@ namespace Kyalio.VRKeyboard
         /// Uses this keyboard for <paramref name="field"/> (and turns its soft keyboard off).
         /// <paramref name="dock"/> overrides where the keyboard appears for this field.
         /// </summary>
-        public void Register(TMP_InputField field, KeyboardLayoutKind kind, RectTransform dock = null)
+        /// <returns>
+        /// False, changing nothing, when the keyboard is not set up correctly
+        /// (<see cref="IsUsable"/>): the field keeps its platform keyboard.
+        /// </returns>
+        public bool Register(TMP_InputField field, KeyboardLayoutKind kind, RectTransform dock = null)
         {
-            if (field == null) return;
+            if (field == null || !IsUsable) return false;
             field.shouldHideSoftKeyboard = true;
             field.shouldHideMobileInput = true;
             _fields[field] = new Registration { Kind = kind, Dock = dock };
+            return true;
         }
 
         public void Unregister(TMP_InputField field)
@@ -140,8 +145,33 @@ namespace Kyalio.VRKeyboard
 
         // ── Lifecycle ─────────────────────────────────────────────────
 
+        /// <summary>
+        /// The parts the keyboard needs are assigned and laid out as expected (key area and
+        /// key template inside the panel). When false, Register refuses fields so they keep
+        /// their platform keyboard.
+        /// </summary>
+        public bool IsUsable =>
+            panel != null && keyArea != null && keyTemplate != null &&
+            IsWithin(keyArea, panel) && IsWithin(keyTemplate.transform, keyArea);
+
+        private static bool IsWithin(Transform child, Transform root)
+        {
+            for (var t = child; t != null; t = t.parent)
+                if (t == root) return true;
+            return false;
+        }
+
         private void Awake()
         {
+            if (!IsUsable)
+            {
+                Debug.LogError("[VirtualKeyboard] Panel, Key Area and Key Template must be assigned, " +
+                               "with the key area inside the panel and the template inside the key area. " +
+                               "Keyboard disabled.", this);
+                enabled = false;
+                return;
+            }
+
             _home = transform;
             _keyAreaPath = PathFrom(panel, keyArea);
             _templatePath = PathFrom(panel, keyTemplate.transform);
@@ -179,8 +209,8 @@ namespace Kyalio.VRKeyboard
 
             panel = Instantiate(_panelSpare, _home);
             panel.name = _panelSpare.name.Replace(" (Spare)", string.Empty);
-            keyArea = (RectTransform)panel.Find(_keyAreaPath);
-            keyTemplate = panel.Find(_templatePath).GetComponent<KeyboardKey>();
+            keyArea = (RectTransform)FindUnder(panel, _keyAreaPath);
+            keyTemplate = FindUnder(panel, _templatePath).GetComponent<KeyboardKey>();
             _keys.Clear();
             _pages = null;
             _registration = null;
@@ -188,13 +218,19 @@ namespace Kyalio.VRKeyboard
             return true;
         }
 
+        // Path of child below root ("" when child is root itself). IsUsable guarantees
+        // child is root or one of its descendants.
         private static string PathFrom(Transform root, Transform child)
         {
+            if (child == root) return string.Empty;
             var path = child.name;
             for (var t = child.parent; t != null && t != root; t = t.parent)
                 path = t.name + "/" + path;
             return path;
         }
+
+        private static Transform FindUnder(Transform root, string path) =>
+            string.IsNullOrEmpty(path) ? root : root.Find(path);
 
         // Only hide here: OnDisable also runs while the hierarchy is being deactivated (e.g.
         // leaving Play mode), when Unity refuses to reparent the panel out of the field it
@@ -204,7 +240,7 @@ namespace Kyalio.VRKeyboard
         // Destroyed while attached: don't leave the panel behind under the field.
         private void OnDestroy()
         {
-            if (panel != null && panel.parent != _home) Destroy(panel.gameObject);
+            if (_home != null && panel != null && panel.parent != _home) Destroy(panel.gameObject);
         }
 
         private void LateUpdate()

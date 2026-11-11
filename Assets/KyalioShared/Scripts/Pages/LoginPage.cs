@@ -88,12 +88,11 @@ namespace Kyalio.Pages
             // also turn the system keyboard off, leaving the fields with no keyboard at all.
             // Not isActiveAndEnabled: that stays false until the keyboard's OnEnable has run,
             // and this Awake may run before it.
-            if (_keyboard != null && _keyboard.enabled && _keyboard.gameObject.activeInHierarchy)
-            {
-                _keyboard.Register(_emailInput, KeyboardLayoutKind.Email);
-                _keyboard.Register(_passwordInput, KeyboardLayoutKind.Text);
-            }
-            else
+            // Register refuses (returns false) when the keyboard is not set up correctly.
+            bool useKeyboard = _keyboard != null && _keyboard.enabled && _keyboard.gameObject.activeInHierarchy &&
+                               _keyboard.Register(_emailInput, KeyboardLayoutKind.Email) &&
+                               _keyboard.Register(_passwordInput, KeyboardLayoutKind.Text);
+            if (!useKeyboard)
             {
                 SystemKeyboardInput.EnsureOn(_emailInput);
                 SystemKeyboardInput.EnsureOn(_passwordInput);

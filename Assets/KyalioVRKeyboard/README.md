@@ -6,8 +6,8 @@ An in-world keyboard for `TMP_InputField`s on a world-space canvas in VR.
 - **The field keeps its caret:** it blinks, and pointing into the text moves it.
 - **Layouts:**
   - **Letters:** QWERTY, with Shift; double-tap Shift for caps lock.
-  - **Symbols page:** numbers and symbols.
-  - **Email:** adds `@` and `.com` keys to the letters page.
+  - **Symbols pages:** numbers and common symbols (`123`), and the remaining ASCII symbols (`#+=`), so any password can be typed.
+  - **Email:** adds `@` and `.com` keys to the letters page, and has no space key.
   - **Number pad:** for codes.
 - **Built from one key template:** restyle the template and every key follows it.
 
@@ -40,6 +40,8 @@ Depends only on Unity UI and TextMeshPro (`Kyalio.VRKeyboard.asmdef`). To use it
        keyboard.Register(codeInput,     KeyboardLayoutKind.Numeric, codeDock); // optional own dock
    }
    ```
+
+`Register` returns `false` and leaves the field untouched (keeping its platform keyboard) when the keyboard isn't set up correctly: Panel, Key Area or Key Template missing, or not nested as above.
 
 The keyboard shows while a registered field is focused, and hides when focus leaves it or when **Done** is pressed. Done only closes the keyboard; it never submits. Subscribe to `DonePressed` if you want it to submit, and to `KeyPressed` for click sounds or haptics.
 

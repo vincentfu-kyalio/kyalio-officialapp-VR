@@ -23,7 +23,8 @@ namespace Kyalio.VRKeyboard
     public class KeyboardKey : MonoBehaviour,
         IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
         IPointerEnterHandler, IPointerExitHandler,
-        IInitializePotentialDragHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+        IInitializePotentialDragHandler, IBeginDragHandler, IDragHandler, IEndDragHandler,
+        IScrollHandler
     {
         [SerializeField] private Image background;
         [SerializeField] private TextMeshProUGUI label;
@@ -117,5 +118,8 @@ namespace Kyalio.VRKeyboard
         public void OnBeginDrag(PointerEventData e) { }
         public void OnDrag(PointerEventData e) { }
         public void OnEndDrag(PointerEventData e) { }
+
+        // Swallow scroll too: it would scroll the field's text or a ScrollRect behind it.
+        public void OnScroll(PointerEventData e) { }
     }
 }

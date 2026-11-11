@@ -67,6 +67,7 @@ namespace Kyalio.VRKeyboard
     {
         public const string LettersPage = "letters";
         public const string SymbolsPage = "symbols";
+        public const string MorePage = "more";
         public const string NumericPage = "numeric";
 
         private static KeyDef K(string value, float width = 1f) =>
@@ -96,20 +97,32 @@ namespace Kyalio.VRKeyboard
         private static readonly KeyDef Space     = new(KeyAction.Insert, " ", null, 5f);
         private static readonly KeyDef ToSymbols = new(KeyAction.Page, SymbolsPage, "123", 1.5f);
         private static readonly KeyDef ToLetters = new(KeyAction.Page, LettersPage, "ABC", 1.5f);
+        private static readonly KeyDef ToMore    = new(KeyAction.Page, MorePage, "#+=", 1.5f);
+        private static readonly KeyDef BackTo123 = new(KeyAction.Page, SymbolsPage, "123", 1.5f);
 
         private static KeyboardPage Letters(bool email) => new(LettersPage, 1.15f,
             Row("qwertyuiop", Backspace),
             Row("asdfghjkl"),
             Row(Shift, "zxcvbnm-_"),
+            // No space key for email (addresses never contain one, and a wide space bar
+            // next to @ and . is easy to hit with a ray).
             email
-                ? Row(ToSymbols, K("@"), new KeyDef(KeyAction.Insert, " ", null, 3.5f), K("."),
-                      new KeyDef(KeyAction.Insert, ".com", null, 1.5f), Done)
+                ? Row(ToSymbols, new KeyDef(KeyAction.Insert, "@", null, 1.5f),
+                      new KeyDef(KeyAction.Insert, ".", null, 1.5f),
+                      new KeyDef(KeyAction.Insert, ".com", null, 2f), Done)
                 : Row(ToSymbols, Space, K("."), Done));
 
         private static KeyboardPage Symbols() => new(SymbolsPage, 1.15f,
             Row("1234567890", Backspace),
             Row("!@#$%&*()?"),
-            Row("-_+=/:;,'\""),
+            Row(ToMore, "-_+=/:;,'\""),
+            Row(ToLetters, Space, K("."), Done));
+
+        // The remaining printable ASCII symbols, so any password can be typed.
+        private static KeyboardPage More() => new(MorePage, 1.15f,
+            Row("[]{}<>^~`|", Backspace),
+            Row("\\\"'.,?!:;"),
+            Row(BackTo123, "-_@#$%&*"),
             Row(ToLetters, Space, K("."), Done));
 
         private static KeyboardPage Numeric() => new(NumericPage, 2.2f,
@@ -132,6 +145,7 @@ namespace Kyalio.VRKeyboard
                 default:
                     pages[LettersPage] = Letters(kind == KeyboardLayoutKind.Email);
                     pages[SymbolsPage] = Symbols();
+                    pages[MorePage] = More();
                     startPage = LettersPage;
                     break;
             }
