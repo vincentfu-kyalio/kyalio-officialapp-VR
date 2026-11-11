@@ -22,7 +22,7 @@ Depends only on Unity UI and TextMeshPro (`Kyalio.VRKeyboard.asmdef`). To use it
    └ Panel            the visible keyboard (background Image, its size = keyboard size)
      └ Keys           key area, inset for padding
        └ Key Template KeyboardKey: background Image + Label (TMP) + Icon (inactive)
-   Keyboard Dock      where the keyboard appears — move / resize it in the Scene view
+   Keyboard Dock      where the keyboard appears (its centre) — move it in the Scene view
    ```
 
 2. Style **Panel** and **Key Template** however you like: colours, sprites, the label's font. You can also set the Del / Shift / Done icons on `VirtualKeyboard`.
@@ -54,7 +54,8 @@ The keyboard shows while a registered field is focused, and hides when focus lea
 - **Its own Canvas.** The panel has a nested `Canvas` with **Override Sorting** (`sortingOrder`). That stops the page drawing over it and parent `RectMask2D`s clipping it, and lets it hide cheaply.
 - **Typing goes through the field.** It uses `TMP_InputField.ProcessEvent`, so content type, character validation, character limit and replacing a selection all behave as with a hardware keyboard.
 - **Hidden presses and drags.** Presses on the panel background, and drags across keys, are swallowed (`KeyboardSurface`, `KeyboardKey`). This stops them reaching the field and moving the caret or selecting text.
-- **Docks:** a field's own dock wins, then the keyboard's default dock. With neither, the keyboard appears just below the field.
+- **Docks:** a field's own dock wins, then the keyboard's default dock. With neither, the keyboard appears just below the field. A dock sets position, rotation and scale only; the keyboard's size is the **Panel**'s size (the dock's rectangle is just a guide in the Scene view).
+- **Raycasting:** the panel's nested Canvas gets a plain `GraphicRaycaster`, which works with Meta Interaction SDK's `PointableCanvasModule`. With an input setup that needs a different raycaster (e.g. XRI's `TrackedDeviceGraphicRaycaster`), add that one to the Panel yourself; an existing raycaster is kept.
 - **If a field is destroyed while focused**, the panel goes with it; the keyboard rebuilds the panel from a spare copy the next time it's needed.
 - **The controller must stay active.** The `VirtualKeyboard` object polls focus every frame, and only the panel moves. Do not put the controller under a page that gets deactivated.
 - **Soft keyboard off.** `Register` sets `shouldHideSoftKeyboard` and `shouldHideMobileInput` on the field.

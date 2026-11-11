@@ -83,25 +83,23 @@ namespace Kyalio.Pages
             // In-world keyboard (Kyalio.VRKeyboard): no system keyboard, so the overlay canvas
             // stays on and the fields keep a caret that the pointer can move. Falls back to
             // the system keyboard (with the overlay suspend) when the scene has no keyboard.
+            // Register refuses a keyboard that can't serve the field (missing, set up wrong,
+            // or inactive); that field then keeps the system keyboard.
             if (_keyboard == null) _keyboard = FindFirstObjectByType<VirtualKeyboard>();
-            // Only an active keyboard polls focus; registering with an inactive one would
-            // also turn the system keyboard off, leaving the fields with no keyboard at all.
-            // Not isActiveAndEnabled: that stays false until the keyboard's OnEnable has run,
-            // and this Awake may run before it.
-            // Register refuses (returns false) when the keyboard is not set up correctly.
-            bool useKeyboard = _keyboard != null && _keyboard.enabled && _keyboard.gameObject.activeInHierarchy &&
-                               _keyboard.Register(_emailInput, KeyboardLayoutKind.Email) &&
-                               _keyboard.Register(_passwordInput, KeyboardLayoutKind.Text);
-            if (!useKeyboard)
-            {
-                SystemKeyboardInput.EnsureOn(_emailInput);
-                SystemKeyboardInput.EnsureOn(_passwordInput);
-            }
+            UseKeyboardOrSystem(_emailInput, KeyboardLayoutKind.Email);
+            UseKeyboardOrSystem(_passwordInput, KeyboardLayoutKind.Text);
 
             // No onSubmit → login: the Quest system keyboard reports Status.Done on any
             // close (checkmark or hide), and TMP turns Done into onSubmit, so dismissing
             // the keyboard would sign in. Login is triggered only by the Login button
             // (the in-world keyboard's Done only closes it).
+        }
+
+        private void UseKeyboardOrSystem(TMP_InputField field, KeyboardLayoutKind kind)
+        {
+            if (field == null) return;
+            if (_keyboard == null || !_keyboard.Register(field, kind))
+                SystemKeyboardInput.EnsureOn(field);
         }
 
         // ── IPageHandler ──────────────────────────────────────────────

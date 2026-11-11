@@ -24,8 +24,8 @@ namespace Kyalio.VRKeyboard
     /// content type, validation, character limit and selection replacement all apply.
     ///
     /// Scene setup (see README): this component on an object that stays active (it polls
-    /// focus every frame), with a child panel ? a RectTransform with the background Image,
-    /// sized as the keyboard ? holding the key area and an inactive key template with
+    /// focus every frame), with a child panel (a RectTransform with the background Image,
+    /// sized as the keyboard) holding the key area and an inactive key template with
     /// <see cref="KeyboardKey"/>. Only the panel moves under the focused field; it hides by
     /// disabling its own Canvas.
     /// </summary>
@@ -78,6 +78,8 @@ namespace Kyalio.VRKeyboard
         {
             public KeyboardLayoutKind Kind;
             public RectTransform Dock;
+            // The field's own settings, restored by Unregister.
+            public bool HideSoftKeyboard, HideMobileInput;
         }
 
         private readonly Dictionary<TMP_InputField, Registration> _fields = new();
@@ -92,7 +94,7 @@ namespace Kyalio.VRKeyboard
         private RectTransform _panelSpare;
         private string _keyAreaPath, _templatePath;
         private Canvas _canvas;
-        private GraphicRaycaster _raycaster;
+        private BaseRaycaster _raycaster;
 
         private TMP_InputField _target;
         private Registration _registration;
@@ -111,22 +113,39 @@ namespace Kyalio.VRKeyboard
         /// <paramref name="dock"/> overrides where the keyboard appears for this field.
         /// </summary>
         /// <returns>
-        /// False, changing nothing, when the keyboard is not set up correctly
-        /// (<see cref="IsUsable"/>): the field keeps its platform keyboard.
+        /// False, changing nothing, when this keyboard cannot serve the field: not set up
+        /// correctly (<see cref="IsUsable"/>), or its controller is disabled / inactive (it
+        /// would never notice the field gaining focus). The field then keeps its platform
+        /// keyboard.
         /// </returns>
         public bool Register(TMP_InputField field, KeyboardLayoutKind kind, RectTransform dock = null)
         {
-            if (field == null || !IsUsable) return false;
+            // Not isActiveAndEnabled: that stays false until OnEnable has run, and callers
+            // often register from an Awake that runs before it.
+            if (field == null || !IsUsable || !enabled || !gameObject.activeInHierarchy) return false;
+
+            if (!_fields.TryGetValue(field, out var registration))
+                registration = new Registration
+                {
+                    HideSoftKeyboard = field.shouldHideSoftKeyboard,
+                    HideMobileInput = field.shouldHideMobileInput,
+                };
+            registration.Kind = kind;
+            registration.Dock = dock;
+            _fields[field] = registration;
+
             field.shouldHideSoftKeyboard = true;
             field.shouldHideMobileInput = true;
-            _fields[field] = new Registration { Kind = kind, Dock = dock };
             return true;
         }
 
+        /// <summary>Stops serving the field and gives it back its platform keyboard settings.</summary>
         public void Unregister(TMP_InputField field)
         {
-            if (field == null) return;
+            if (field == null || !_fields.TryGetValue(field, out var registration)) return;
             _fields.Remove(field);
+            field.shouldHideSoftKeyboard = registration.HideSoftKeyboard;
+            field.shouldHideMobileInput = registration.HideMobileInput;
             // May be called from a field's OnDisable / OnDestroy: hide only, LateUpdate
             // moves the panel home.
             if (field == _target) Detach(returnHome: false);
@@ -196,6 +215,7 @@ namespace Kyalio.VRKeyboard
             layout.ignoreLayout = true;
 
             if (!go.TryGetComponent(out _canvas)) _canvas = go.AddComponent<Canvas>();
+            // Keep a raycaster set up on the panel (e.g. an XR one); otherwise a plain one.
             if (!go.TryGetComponent(out _raycaster)) _raycaster = go.AddComponent<GraphicRaycaster>();
             go.SetActive(true);
             SetVisible(false);
@@ -555,8 +575,10 @@ namespace Kyalio.VRKeyboard
             e.keyCode = KeyCode.Backspace;
             e.modifiers = EventModifiers.None;
             e.character = '\0';
-            _target.ProcessEvent(e);
-            RefreshTarget();
+            var field = _target;
+            field.ProcessEvent(e);
+            // An onValueChanged listener may have closed the keyboard (see Type).
+            if (field == _target) RefreshTarget();
         }
 
         // What TMP's own key handling (TMP_InputField.OnUpdateSelected) does after every key,

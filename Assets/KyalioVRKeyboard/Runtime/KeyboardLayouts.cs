@@ -98,7 +98,6 @@ namespace Kyalio.VRKeyboard
         private static readonly KeyDef ToSymbols = new(KeyAction.Page, SymbolsPage, "123", 1.5f);
         private static readonly KeyDef ToLetters = new(KeyAction.Page, LettersPage, "ABC", 1.5f);
         private static readonly KeyDef ToMore    = new(KeyAction.Page, MorePage, "#+=", 1.5f);
-        private static readonly KeyDef BackTo123 = new(KeyAction.Page, SymbolsPage, "123", 1.5f);
 
         private static KeyboardPage Letters(bool email) => new(LettersPage, 1.15f,
             Row("qwertyuiop", Backspace),
@@ -122,7 +121,7 @@ namespace Kyalio.VRKeyboard
         private static KeyboardPage More() => new(MorePage, 1.15f,
             Row("[]{}<>^~`|", Backspace),
             Row("\\\"'.,?!:;"),
-            Row(BackTo123, "-_@#$%&*"),
+            Row(ToSymbols, "-_@#$%&*"),
             Row(ToLetters, Space, K("."), Done));
 
         private static KeyboardPage Numeric() => new(NumericPage, 2.2f,
@@ -132,8 +131,24 @@ namespace Kyalio.VRKeyboard
             Row(new KeyDef(KeyAction.Done, null, null, 1f), K("0"),
                 new KeyDef(KeyAction.Backspace, null, null, 1f)));
 
-        /// <summary>The pages of a layout kind; the first is the start page.</summary>
+        // Layouts never change: build each kind once instead of on every keyboard show.
+        private static readonly Dictionary<KeyboardLayoutKind, (Dictionary<string, KeyboardPage> pages, string start)>
+            s_cache = new();
+
+        /// <summary>The pages of a layout kind (shared, do not modify); startPage is the first one shown.</summary>
         public static Dictionary<string, KeyboardPage> PagesFor(KeyboardLayoutKind kind, out string startPage)
+        {
+            if (!s_cache.TryGetValue(kind, out var built))
+            {
+                var pages = Build(kind, out var start);
+                built = (pages, start);
+                s_cache[kind] = built;
+            }
+            startPage = built.start;
+            return built.pages;
+        }
+
+        private static Dictionary<string, KeyboardPage> Build(KeyboardLayoutKind kind, out string startPage)
         {
             var pages = new Dictionary<string, KeyboardPage>();
             switch (kind)
