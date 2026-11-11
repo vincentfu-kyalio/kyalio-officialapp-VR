@@ -227,9 +227,10 @@ namespace Kyalio.Pages
             {
                 SetBusy(false);
                 // A rejected password (e.g. changed on another device) must not stay remembered.
-                if (GetErrorCode(e) == "AUTH_INVALID_CREDENTIALS")
+                var code = GetErrorCode(e);
+                if (code == "AUTH_INVALID_CREDENTIALS")
                     AuthStorage.ForgetPassword();
-                ShowApiError(e);
+                ShowApiError(e, code);
             }
         }
 
@@ -560,14 +561,15 @@ namespace Kyalio.Pages
             catch { return null; /* non-JSON body */ }
         }
 
-        private void ShowApiError(Exception e)
+        private void ShowApiError(Exception e) => ShowApiError(e, GetErrorCode(e));
+
+        private void ShowApiError(Exception e, string code)
         {
             if (e is ApiException api)
             {
                 // 426 → ApiClient already raised the force-update overlay.
                 if (api.StatusCode == 426) return;
 
-                var code = GetErrorCode(api);
                 Debug.LogWarning($"[LoginPage] Auth error {api.StatusCode} {code}");
                 ShowError(code switch
                 {

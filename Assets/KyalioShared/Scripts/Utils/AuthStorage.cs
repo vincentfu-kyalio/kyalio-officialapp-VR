@@ -73,8 +73,9 @@ namespace Kyalio.Utils
 
         /// <summary>
         /// Returns false when the user has never saved a preference (caller keeps the
-        /// scene's default toggle state). A password that cannot be decrypted (key wiped,
-        /// data corrupted) is dropped and returned as "".
+        /// scene's default toggle state). A password that can never be decrypted (key wiped,
+        /// data corrupted) is dropped; one that fails transiently is kept for the next
+        /// launch. Either way it is returned as "".
         /// </summary>
         public static bool TryLoadRemembered(out bool remember, out string email, out string password)
         {
@@ -87,11 +88,15 @@ namespace Kyalio.Utils
             var stored = PlayerPrefs.GetString(PasswordKey, "");
             if (!string.IsNullOrEmpty(stored))
             {
-                password = SecureStore.Unprotect(stored);
-                if (password == null)
+                switch (SecureStore.Unprotect(stored, out var plaintext))
                 {
-                    password = "";
-                    ForgetPassword();
+                    case SecureStore.UnprotectResult.Success:
+                        password = plaintext;
+                        break;
+                    case SecureStore.UnprotectResult.Invalid:
+                        ForgetPassword();
+                        break;
+                    // Unavailable: keep the ciphertext; it may decrypt on the next launch.
                 }
             }
             return PlayerPrefs.HasKey(RememberKey);

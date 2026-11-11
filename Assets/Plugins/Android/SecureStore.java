@@ -1,13 +1,16 @@
 package com.kyalio.secure;
 
 import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyPermanentlyInvalidatedException;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.util.Log;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.security.UnrecoverableKeyException;
 
+import javax.crypto.AEADBadTagException;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -19,8 +22,7 @@ import javax.crypto.spec.GCMParameterSpec;
  * the app's data directory is useless off-device.
  *
  * Called from C# (Kyalio.Utils.SecureStore) via JNI. Payload format: Base64(iv || ciphertext+tag).
- * Every method returns null on failure instead of throwing, so the caller can fall back to
- * "nothing remembered".
+ * Methods never throw across JNI; see each method for its failure contract.
  */
 public final class SecureStore {
     private static final String TAG = "KyalioSecureStore";
@@ -30,8 +32,17 @@ public final class SecureStore {
     private static final int IV_LENGTH = 12;
     private static final int TAG_BITS = 128;
 
+    /** decrypt() result prefix: the rest of the string is the plaintext. */
+    private static final String RESULT_OK = "1";
+    /** decrypt() result: the payload can never be decrypted (key gone, data corrupt). */
+    private static final String RESULT_INVALID = "0";
+
+    /** Keystore lookups go through a binder call to the keystore service; cache the handle. */
+    private static SecretKey cachedKey;
+
     private SecureStore() { }
 
+    /** Returns the payload, or null on failure. */
     public static synchronized String encrypt(String plaintext) {
         if (plaintext == null) return null;
         try {
@@ -45,34 +56,53 @@ public final class SecureStore {
             System.arraycopy(ct, 0, out, iv.length, ct.length);
             return Base64.encodeToString(out, Base64.NO_WRAP);
         } catch (Exception e) {
+            cachedKey = null;
             Log.w(TAG, "encrypt failed: " + e.getClass().getSimpleName());
             return null;
         }
     }
 
+    /**
+     * Returns "1" + plaintext on success, "0" when the payload is permanently undecryptable
+     * (caller should discard it), or null on a possibly transient failure (caller should
+     * keep the payload and retry later).
+     */
     public static synchronized String decrypt(String payload) {
-        if (payload == null || payload.isEmpty()) return null;
-        try {
-            byte[] in = Base64.decode(payload, Base64.NO_WRAP);
-            if (in.length <= IV_LENGTH) return null;
+        if (payload == null || payload.isEmpty()) return RESULT_INVALID;
 
+        byte[] in;
+        try {
+            in = Base64.decode(payload, Base64.NO_WRAP);
+        } catch (IllegalArgumentException e) {
+            return RESULT_INVALID;
+        }
+        if (in.length <= IV_LENGTH) return RESULT_INVALID;
+
+        try {
             SecretKey key = getExistingKey();
-            if (key == null) return null;
+            if (key == null) return RESULT_INVALID; // keystore reachable, key gone
 
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, in, 0, IV_LENGTH));
             byte[] pt = cipher.doFinal(in, IV_LENGTH, in.length - IV_LENGTH);
-            return new String(pt, StandardCharsets.UTF_8);
+            return RESULT_OK + new String(pt, StandardCharsets.UTF_8);
+        } catch (AEADBadTagException | KeyPermanentlyInvalidatedException | UnrecoverableKeyException e) {
+            cachedKey = null;
+            Log.w(TAG, "decrypt invalid: " + e.getClass().getSimpleName());
+            return RESULT_INVALID;
         } catch (Exception e) {
+            cachedKey = null;
             Log.w(TAG, "decrypt failed: " + e.getClass().getSimpleName());
             return null;
         }
     }
 
     private static SecretKey getExistingKey() throws Exception {
+        if (cachedKey != null) return cachedKey;
         KeyStore ks = KeyStore.getInstance(KEYSTORE);
         ks.load(null);
-        return (SecretKey) ks.getKey(ALIAS, null);
+        cachedKey = (SecretKey) ks.getKey(ALIAS, null);
+        return cachedKey;
     }
 
     private static SecretKey getOrCreateKey() throws Exception {
@@ -87,6 +117,7 @@ public final class SecureStore {
                 .setKeySize(256)
                 .setRandomizedEncryptionRequired(true)
                 .build());
-        return gen.generateKey();
+        cachedKey = gen.generateKey();
+        return cachedKey;
     }
 }
