@@ -259,6 +259,7 @@ namespace Kyalio.Pages
                 // is the previous video's time or 0, which must never be saved as progress.
                 AppPlaybackState.Instance.CurrentPositionMs = (long)(current * 1000.0);
                 _positionValid = true;
+                Session.PlaybackActive = true;   // from now on a token expiry waits for the viewer
             }
             RefreshPlayPauseButton();
 
@@ -356,6 +357,18 @@ namespace Kyalio.Pages
 
             // Restore the Meta composition-layer rendering for the menu UI.
             if (_overlayCanvas != null) _overlayCanvas.overlayEnabled = true;
+
+            Session.PlaybackActive = false;
+            // Catch-all: the player was left with the token expiry still deferred, by a
+            // route that did not complete it (Home does). Sign out on the next frame —
+            // OnExit runs inside a navigation, which must finish before another starts.
+            if (Session.ExpiryDeferred) CompleteDeferredExpiryNextFrameAsync().Forget();
+        }
+
+        private static async UniTaskVoid CompleteDeferredExpiryNextFrameAsync()
+        {
+            await UniTask.Yield();
+            Session.CompleteDeferredExpiry();
         }
 
         // ── Load & play ───────────────────────────────────────────────
@@ -370,6 +383,7 @@ namespace Kyalio.Pages
             _awaitingResumeSeek = false;
             _gateStartedAt      = Time.unscaledTime;
             _positionValid      = false;
+            Session.PlaybackActive = false;   // until this video plays, an expiry signs out at once
             ShowStartPosition(item);
 
             if (string.IsNullOrEmpty(item?.VideoId)) { RevealNow(); return; }
@@ -393,7 +407,12 @@ namespace Kyalio.Pages
                 return;
             }
 
-            // 3. Fetch stream URL from API
+            // 3. Fetch stream URL from API — needs a valid token. With the expiry already
+            //    deferred (auto-advance / Next / Prev to a streamed episode), sign out now
+            //    rather than leave the viewer on an empty player. A downloaded episode played
+            //    above without one.
+            if (Session.CompleteDeferredExpiry()) return;
+
             try
             {
                 var stream = await ServiceLocator.Instance.V2.Stream
@@ -451,6 +470,9 @@ namespace Kyalio.Pages
         private async UniTask RefreshStreamUrlAsync(CancellationToken ct)
         {
             if (ct.IsCancellationRequested || _currentItem == null) return;
+            // Token expired: the refresh would be rejected. Let the current URL play to its
+            // end; the player error when it expires completes the sign-out (Error event).
+            if (Session.ExpiryDeferred) return;
 
             try
             {
@@ -497,6 +519,9 @@ namespace Kyalio.Pages
                     break;
 
                 case MediaPlayerEvent.EventType.Error:
+                    // With the token expired, a playback error (typically the stream URL
+                    // running out) cannot be recovered: sign out instead of freezing.
+                    if (Session.CompleteDeferredExpiry()) break;
                     RevealNow();
                     break;
 
@@ -572,7 +597,12 @@ namespace Kyalio.Pages
 
         // ── Playback controls ─────────────────────────────────────────
 
-        private void OnHomeClicked() => UIManager.Instance.GoBack(fade: true);
+        private void OnHomeClicked()
+        {
+            // The token expired while watching: sign out now instead of returning to the menu.
+            if (Session.CompleteDeferredExpiry()) return;
+            UIManager.Instance.GoBack(fade: true);
+        }
 
         private void OnPlayPauseClicked()
         {
@@ -688,6 +718,7 @@ namespace Kyalio.Pages
         private async UniTaskVoid SyncWatchProgressAsync(CancellationToken ct)
         {
             if (string.IsNullOrEmpty(_projectId) || _currentItem == null) return;
+            if (Session.ExpiryDeferred) return;   // token expired: the server would reject it
 
             var request = new UpdateWatchProgressRequest
             {

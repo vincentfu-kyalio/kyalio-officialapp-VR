@@ -45,6 +45,8 @@ namespace Kyalio.Core
 
         private static void ClearSessionState()
         {
+            ExpiryDeferred = false;    // a manual logout also settles a pending expiry
+            PlaybackActive = false;
             AppState.Reset();          // also resets ProjectCacheRepository (V2)
             UserLocalState.Reset();
             PlaybackState.Reset();
@@ -68,14 +70,61 @@ namespace Kyalio.Core
         }
 
         /// <summary>
+        /// True while a token expiry has been put off because a video is playing; the player
+        /// completes it (<see cref="CompleteDeferredExpiry"/>) when the user leaves it or the
+        /// video ends.
+        /// </summary>
+        public static bool ExpiryDeferred { get; private set; }
+
+        /// <summary>
+        /// Set by the video player while a video is actually playing (opened and settled).
+        /// Only then is an expiry deferred; opening a video with a dead token, or any other
+        /// page, signs out at once instead of leaving the viewer on an empty player.
+        /// </summary>
+        public static bool PlaybackActive { get; set; }
+
+        /// <summary>
         /// Handle access-token expiry (401). Skips the server-side logout call (the bearer is
         /// already invalid) and drops local session state before returning to the pairing
         /// screen. Quest has no refresh-token flow, so expiry always means re-pair. Shows a
         /// popup informing the user why they were signed out — the underlying page is switched
         /// to Login first so the popup overlays a stable screen when dismissed.
+        ///
+        /// While the video player is open the sign-out is deferred instead: the stream URL is
+        /// signed separately, so the video keeps playing, and kicking a viewer out mid-surgery
+        /// is worse than losing the progress syncs that now fail.
         /// </summary>
         public static void ExpireToLogin()
         {
+            if (PlaybackActive)
+            {
+                if (!ExpiryDeferred)
+                {
+                    Debug.Log("[Session] Access token expired during playback — signing out " +
+                              "when the player is left.");
+                    // The token is dead: never auto-resume it if the app is closed meanwhile.
+                    AuthStorage.ClearCredential();
+                }
+                ExpiryDeferred = true;
+                return;
+            }
+            ExpireNow();
+        }
+
+        /// <summary>
+        /// Completes an expiry deferred during playback (see <see cref="ExpireToLogin"/>).
+        /// Returns false, doing nothing, when none is pending — the caller then navigates as usual.
+        /// </summary>
+        public static bool CompleteDeferredExpiry()
+        {
+            if (!ExpiryDeferred) return false;
+            ExpireNow();
+            return true;
+        }
+
+        private static void ExpireNow()
+        {
+            ExpiryDeferred = false;
             Debug.Log("[Session] Access token expired — returning to login.");
 
             AuthStorage.ClearCredential();
