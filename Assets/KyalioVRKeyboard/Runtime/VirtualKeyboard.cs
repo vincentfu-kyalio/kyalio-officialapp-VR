@@ -89,6 +89,8 @@ namespace Kyalio.VRKeyboard
         private Event KeyEvent => _event ??= new Event { type = EventType.KeyDown };
 
         private Transform _home;
+        private RectTransform _panelSpare;
+        private string _keyAreaPath, _templatePath;
         private Canvas _canvas;
         private GraphicRaycaster _raycaster;
 
@@ -142,9 +144,22 @@ namespace Kyalio.VRKeyboard
         private void Awake()
         {
             _home = transform;
-            var go = panel.gameObject;
+            _keyAreaPath = PathFrom(panel, keyArea);
+            _templatePath = PathFrom(panel, keyTemplate.transform);
+            keyTemplate.gameObject.SetActive(false);
 
-            if (keyTemplate != null) keyTemplate.gameObject.SetActive(false);
+            // While attached, the panel is a child of the field: destroying the field (or its
+            // page) destroys the panel too. Keep an inactive spare to rebuild it from.
+            _panelSpare = Instantiate(panel, _home);
+            _panelSpare.name = panel.name + " (Spare)";
+            _panelSpare.gameObject.SetActive(false);
+
+            SetupPanel();
+        }
+
+        private void SetupPanel()
+        {
+            var go = panel.gameObject;
             if (!go.TryGetComponent<KeyboardSurface>(out _)) go.AddComponent<KeyboardSurface>();
 
             // Never resized or positioned by a layout group of the field it is attached to.
@@ -157,10 +172,41 @@ namespace Kyalio.VRKeyboard
             SetVisible(false);
         }
 
+        // The panel was destroyed with the field it was attached to: rebuild it from the spare.
+        private bool EnsurePanel()
+        {
+            if (panel != null) return true;
+            if (_panelSpare == null) return false;
+
+            panel = Instantiate(_panelSpare, _home);
+            panel.name = _panelSpare.name.Replace(" (Spare)", string.Empty);
+            keyArea = (RectTransform)panel.Find(_keyAreaPath);
+            keyTemplate = panel.Find(_templatePath).GetComponent<KeyboardKey>();
+            _keys.Clear();
+            _pages = null;
+            _registration = null;
+            SetupPanel();
+            return true;
+        }
+
+        private static string PathFrom(Transform root, Transform child)
+        {
+            var path = child.name;
+            for (var t = child.parent; t != null && t != root; t = t.parent)
+                path = t.name + "/" + path;
+            return path;
+        }
+
         // Only hide here: OnDisable also runs while the hierarchy is being deactivated (e.g.
         // leaving Play mode), when Unity refuses to reparent the panel out of the field it
         // is attached to. LateUpdate moves it home once that is allowed again.
         private void OnDisable() => Detach(returnHome: false);
+
+        // Destroyed while attached: don't leave the panel behind under the field.
+        private void OnDestroy()
+        {
+            if (panel != null && panel.parent != _home) Destroy(panel.gameObject);
+        }
 
         private void LateUpdate()
         {
@@ -183,6 +229,7 @@ namespace Kyalio.VRKeyboard
             {
                 _nextRepeatTime += repeatInterval;
                 Backspace();
+                KeyPressed?.Invoke();   // each repeat, like the first press
             }
         }
 
@@ -198,6 +245,7 @@ namespace Kyalio.VRKeyboard
 
         private void Attach(TMP_InputField field)
         {
+            if (!EnsurePanel()) return;
             var registration = _fields[field];
             bool sameLayout = _registration != null && _registration.Kind == registration.Kind;
 
@@ -217,6 +265,16 @@ namespace Kyalio.VRKeyboard
                 if (Mathf.Abs(parentScale) > 1e-6f)
                     panel.localScale = Vector3.one * (dock.lossyScale.x / parentScale);
             }
+            else
+            {
+                // No dock anywhere: just below the field, in its own space — never the
+                // offset or scale left over from the previous field.
+                var fieldRect = ((RectTransform)field.transform).rect;
+                panel.localRotation = Quaternion.identity;
+                panel.localScale = Vector3.one;
+                panel.localPosition = new Vector3(
+                    fieldRect.center.x, fieldRect.yMin - spacing - panel.rect.height / 2f, 0f);
+            }
 
             var parentCanvas = field.GetComponentInParent<Canvas>();
             if (parentCanvas != null)
@@ -224,16 +282,15 @@ namespace Kyalio.VRKeyboard
             _canvas.overrideSorting = true;
             _canvas.sortingOrder = sortingOrder;
 
+            _shift = _capsLock = false;   // every field starts lower case
             if (!sameLayout || _pages == null)
             {
                 _pages = KeyboardLayouts.PagesFor(registration.Kind, out var start);
-                _shift = _capsLock = false;
                 ShowPage(start);
             }
             else
             {
-                // Same layout on another field: keep the page, start lower case.
-                _shift = _capsLock = false;
+                // Focus moved straight to another field with the same layout: keep the page.
                 RefreshLabels();
             }
 
@@ -244,6 +301,7 @@ namespace Kyalio.VRKeyboard
         {
             _repeatKey = null;
             _target = null;
+            _registration = null;   // the next focus starts on the layout's first page
             SetVisible(false);
             if (returnHome) ReturnPanelHome();
         }

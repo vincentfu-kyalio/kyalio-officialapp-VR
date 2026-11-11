@@ -83,8 +83,10 @@ namespace Kyalio.Pages
             // In-world keyboard (Kyalio.VRKeyboard): no system keyboard, so the overlay canvas
             // stays on and the fields keep a caret that the pointer can move. Falls back to
             // the system keyboard (with the overlay suspend) when the scene has no keyboard.
-            if (_keyboard == null) _keyboard = FindFirstObjectByType<VirtualKeyboard>(FindObjectsInactive.Include);
-            if (_keyboard != null)
+            if (_keyboard == null) _keyboard = FindFirstObjectByType<VirtualKeyboard>();
+            // Only an active keyboard polls focus; registering with an inactive one would
+            // also turn the system keyboard off, leaving the fields with no keyboard at all.
+            if (_keyboard != null && _keyboard.isActiveAndEnabled)
             {
                 _keyboard.Register(_emailInput, KeyboardLayoutKind.Email);
                 _keyboard.Register(_passwordInput, KeyboardLayoutKind.Text);

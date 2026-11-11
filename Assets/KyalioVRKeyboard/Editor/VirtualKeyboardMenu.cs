@@ -25,6 +25,11 @@ namespace Kyalio.VRKeyboard.Editor
         [MenuItem("GameObject/Kyalio/VR Keyboard", false, 10)]
         private static void Create(MenuCommand command)
         {
+            // A GameObject-menu item runs once per selected object; build only one keyboard.
+            if (command.context != null && Selection.objects.Length > 1 &&
+                command.context != Selection.activeObject)
+                return;
+
             var parent = (command.context as GameObject)?.transform ?? Selection.activeTransform;
             if (parent == null || parent.GetComponentInParent<Canvas>(true) == null)
             {

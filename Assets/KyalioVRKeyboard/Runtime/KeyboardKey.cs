@@ -51,7 +51,9 @@ namespace Kyalio.VRKeyboard
         {
             Def = def;
             SetLabel(text, iconSprite);
-            _hovered = _down = false;
+            // Keep _hovered: a page switch reuses the key under the pointer, which is still
+            // hovering it (OnDisable clears hover for keys that are hidden).
+            _down = false;
             SetActive(false);
         }
 
