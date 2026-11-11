@@ -396,7 +396,7 @@ namespace Kyalio.Pages
 
             if (localPath != null)
             {
-                OpenMedia(localPath, resumeMs);
+                OpenMedia(localPath, resumeMs, fileOffset: Kyalio.Services.DownloadStorage.HeaderSize);
                 return;
             }
 
@@ -437,11 +437,16 @@ namespace Kyalio.Pages
             }
         }
 
-        /// <summary>Opens media at the given path and stores the resume position.</summary>
+        /// <summary>
+        /// Opens media at the given path and stores the resume position. fileOffset skips the
+        /// obfuscation header of a downloaded file (Android only); every other source passes 0,
+        /// which also clears an offset left by a previously played download.
+        /// </summary>
         private void OpenMedia(string path, int resumeMs,
-            MediaPathType pathType = MediaPathType.AbsolutePathOrURL)
+            MediaPathType pathType = MediaPathType.AbsolutePathOrURL, int fileOffset = 0)
         {
             _pendingResumeMs = resumeMs;
+            _mediaPlayer.PlatformOptionsAndroid.fileOffset = fileOffset;
             _mediaPlayer.OpenMedia(pathType, path, autoPlay: false);
         }
 

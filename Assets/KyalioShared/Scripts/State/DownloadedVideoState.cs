@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Kyalio.Models;
+using Kyalio.Services;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -10,7 +11,8 @@ namespace Kyalio.State
 {
     /// <summary>
     /// Local state for downloaded videos.
-    /// Stored at Application.persistentDataPath/downloadedVideos.json.
+    /// Stored at Application.persistentDataPath/downloadedVideos.json; the video files
+    /// themselves live in DownloadStorage.Root.
     /// Follows the same pattern as UserLocalState; retained after logout.
     /// </summary>
     public class DownloadedVideoState
@@ -64,16 +66,7 @@ namespace Kyalio.State
             var rec = Records.FirstOrDefault(r => r.ProjectId == projectId && r.VideoId == videoId);
             if (rec == null) return;
 
-            try
-            {
-                if (File.Exists(rec.FilePath))
-                    File.Delete(rec.FilePath);
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[DownloadedVideoState] Delete file failed: {e.Message}");
-            }
-
+            DownloadStorage.TryDelete(rec.FilePath);
             Records.Remove(rec);
             Save();
             OnRecordsChanged?.Invoke();
@@ -88,17 +81,7 @@ namespace Kyalio.State
             if (toDelete.Count == 0) return;
 
             foreach (var rec in toDelete)
-            {
-                try
-                {
-                    if (File.Exists(rec.FilePath))
-                        File.Delete(rec.FilePath);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"[DownloadedVideoState] Delete file failed: {e.Message}");
-                }
-            }
+                DownloadStorage.TryDelete(rec.FilePath);
 
             Records.RemoveAll(r => r.ProjectId == projectId);
             Save();
@@ -119,6 +102,37 @@ namespace Kyalio.State
             Save();
             OnRecordsChanged?.Invoke();
             return true;
+        }
+
+        /// <summary>
+        /// Discards downloads made before private storage: their records and the whole legacy
+        /// folder (every legacy file, partial ones included, lived in it). Users re-download
+        /// into the new location. Safe to call every launch; a no-op once done.
+        ///
+        /// The server is deliberately not sent DELETE /download for these: records carry no
+        /// account, and sending them with whoever signs in next could clear another account's
+        /// server record. A few stale server-side download entries are the accepted cost.
+        /// </summary>
+        public void MigrateLegacyStorage()
+        {
+            int removed = Records.RemoveAll(r => r.IsLegacy);
+            if (removed > 0)
+            {
+                Save();
+                Debug.Log($"[DownloadedVideoState] Discarded {removed} legacy download(s).");
+                OnRecordsChanged?.Invoke();
+            }
+
+            try
+            {
+                var legacyRoot = DownloadStorage.LegacyRoot;
+                if (Directory.Exists(legacyRoot))
+                    Directory.Delete(legacyRoot, recursive: true);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[DownloadedVideoState] Delete legacy folder failed: {e.Message}");
+            }
         }
 
         public void Save()

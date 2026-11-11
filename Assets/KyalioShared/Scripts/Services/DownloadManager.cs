@@ -13,8 +13,8 @@ namespace Kyalio.Services
 {
     /// <summary>
     /// Video download manager: single active download with a FIFO queue.
-    /// Attach to the same GameObject as AppManager (already DontDestroyOnLoad).
-    /// AppManager.Awake calls Initialize(baseUrl).
+    /// Attach to a DontDestroyOnLoad GameObject. Files are laid out by DownloadStorage;
+    /// the legacy-storage cleanup runs from AppBootstrapper, not from here.
     /// </summary>
     public class DownloadManager : MonoBehaviour
     {
@@ -149,10 +149,32 @@ namespace Kyalio.Services
             _downloadCts = new CancellationTokenSource();
             var ct = _downloadCts.Token;
 
-            var destPath = GetDownloadPath(task.ProjectId, task.VideoId);
-            EnsureDownloadDir();
+            var destPath = DownloadStorage.GetFilePath(task.ProjectId, task.VideoId);
+            int headerSize = DownloadStorage.HeaderSize;
 
-            long existingBytes = File.Exists(destPath) ? new FileInfo(destPath).Length : 0;
+            try
+            {
+                DownloadStorage.EnsureRoot();
+                // Start over when the file is missing, was cut off inside the header, or already
+                // holds every media byte without a record (e.g. a crash before AddRecord): a
+                // Range from the end would only get 416 back, failing every retry.
+                long mediaBytes = File.Exists(destPath)
+                    ? new FileInfo(destPath).Length - headerSize
+                    : -1;
+                if (mediaBytes < 0 || (task.TotalBytes > 0 && mediaBytes >= task.TotalBytes))
+                    DownloadStorage.WriteHeader(destPath);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[DownloadManager] Prepare file failed: {e.Message}");
+                OnFailed?.Invoke(task.ProjectId, task.VideoId, e.Message);
+                _downloadCts?.Dispose();
+                _downloadCts = null;
+                return;
+            }
+
+            // Media bytes already on disk after the header; the Range offset is in media bytes.
+            long existingBytes = new FileInfo(destPath).Length - headerSize;
             bool useRange = existingBytes > 0;
 
             var download = ServiceLocator.Instance?.V2?.Download;
@@ -182,7 +204,8 @@ namespace Kyalio.Services
                 req = new UnityWebRequest(urlResp.DownloadUrl, UnityWebRequest.kHttpVerbGET);
                 if (useRange)
                     req.SetRequestHeader("Range", $"bytes={existingBytes}-");
-                req.downloadHandler = new DownloadHandlerFile(destPath, useRange);
+                // Always append: the file already holds the header (and any resumed bytes).
+                req.downloadHandler = new DownloadHandlerFile(destPath, append: true);
 
                 var op = req.SendWebRequest();
 
@@ -200,9 +223,11 @@ namespace Kyalio.Services
                 }
 
                 // Range request sent but server returned 200 (not supported); partial file is corrupted — delete and let the user retry
-                if (useRange && req.responseCode == 200)
+                // 416: the partial file no longer lines up with the remote one. Either way the
+                // partial file is unusable — delete it so the retry starts clean.
+                if (useRange && (req.responseCode == 200 || req.responseCode == 416))
                 {
-                    TryDeleteFile(destPath);
+                    DownloadStorage.TryDelete(destPath);
                     NotifyServerCanceled(task);
                     OnFailed?.Invoke(task.ProjectId, task.VideoId, "Server does not support resume. Please try again.");
                     return;
@@ -222,7 +247,7 @@ namespace Kyalio.Services
                 {
                     ProjectId = task.ProjectId,
                     VideoId = task.VideoId,
-                    FilePath = destPath,
+                    FileName = Path.GetFileName(destPath),
                     DownloadedAt = DateTime.UtcNow,
                     SizeBytes = task.TotalBytes
                 });
@@ -258,23 +283,6 @@ namespace Kyalio.Services
         private static void NotifyServerCanceled(DownloadTask task) =>
             ServiceLocator.Instance?.V2?.Download
                 ?.MarkCanceledAsync(task.ProjectId, task.VideoId).Forget();
-
-        // ── Helpers ───────────────────────────────────────────────────
-        public static string GetDownloadPath(string projectId, string videoId) =>
-            Path.Combine(Application.persistentDataPath, "downloads", $"{projectId}_{videoId}.mp4");
-
-        private static void EnsureDownloadDir()
-        {
-            var dir = Path.Combine(Application.persistentDataPath, "downloads");
-            if (!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-        }
-
-        private static void TryDeleteFile(string path)
-        {
-            try { if (File.Exists(path)) File.Delete(path); }
-            catch { }
-        }
     }
 
     public class DownloadTask
