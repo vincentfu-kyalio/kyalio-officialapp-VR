@@ -106,8 +106,6 @@ namespace Kyalio.Pages
         public void OnEnter(object param)
         {
             SubscribeDownloadEvents();
-            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
-            ProjectCacheRepository.OnProgressChanged += OnWatchProgressChanged;
 
             // Parse param first — both real and fake modes need the projectId.
             string incomingId = null;
@@ -134,6 +132,10 @@ namespace Kyalio.Pages
             {
                 return; // Returning via GoBack with no prior context — nothing to show
             }
+
+            // Subscribed only once there is a project to show (OnExit / OnDestroy unsubscribe).
+            ProjectCacheRepository.OnProgressChanged -= OnWatchProgressChanged;
+            ProjectCacheRepository.OnProgressChanged += OnWatchProgressChanged;
 
             if (DevFlags.UseFakeData)
             {
